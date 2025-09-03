@@ -1,4 +1,3 @@
-\
 // Self-contained GitHub Action entry (no dependencies).
 // Reads inputs via environment variables (INPUT_<NAME>), performs HTTPS PUT to Enov8 CMDB.
 
@@ -108,7 +107,6 @@ async function run() {
 
     const result = await httpRequest(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
     info('✅ Enov8 CMDB updated successfully.');
-    // legacy set-output for compatibility with older workflows
     console.log(`::set-output name=result::${JSON.stringify(result)}`);
   } catch (err) {
     fail(err && err.message ? err.message : String(err));
