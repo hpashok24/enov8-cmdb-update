@@ -1,0 +1,47 @@
+name: 'Enov8 - CMDB Update'
+description: 'Update Enov8 CMDB (Environment Instance, System Component, System Interface) via PUT.'
+author: 'hpashok24'
+branding:
+  icon: 'database'
+  color: 'blue'
+
+inputs:
+  resourceType:
+    description: 'Environment Instance | System Component | System Interface'
+    required: true
+  resourceName:
+    description: 'Name of the resource to update (goes to "Resource Name")'
+    required: true
+  version:
+    description: 'Optional version string to include'
+    required: false
+  status:
+    description: 'Optional status string to include'
+    required: false
+  includeVersion:
+    description: 'If true, require & include version'
+    required: false
+    default: 'false'
+  includeStatus:
+    description: 'If true, require & include status'
+    required: false
+    default: 'false'
+
+  app_id:
+    description: 'Enov8 App ID'
+    required: true
+  app_key:
+    description: 'Enov8 App Key'
+    required: true
+  enov8_url:
+    description: 'Base URL of your Enov8 instance (e.g. https://yourcompany.enov8.cloud/ecosystem)'
+    required: true
+
+  insecure_skip_tls_verify:
+    description: 'true to skip TLS verification (NOT recommended)'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
