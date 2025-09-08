@@ -10,7 +10,7 @@ jobs:
         uses: hpashok24/enov8-cmdb-update@main
         with:
           resourceType: "Environment Instance"
-          resourceName: "GDW Dev"
+          resourceName: "GDW (DEV)"
           includeVersion: "true"
           version: "18.0.99"
           includeStatus: "true"
