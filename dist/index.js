@@ -73,8 +73,8 @@ async function run() {
     const resourceType = getInput('resourceType', { required: true });
     const resourceName = getInput('resourceName', { required: true });
 
-    const version = getInput('version', { required: includeVersion });
-    const status  = getInput('status', { required: includeStatus });
+    const version = getInput('version', { required: false });
+    const status  = getInput('status', { required: false})
 
     const appId   = getInput('app_id', { required: true });
     const appKey  = getInput('app_key', { required: true });
