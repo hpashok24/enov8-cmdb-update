@@ -73,9 +73,6 @@ async function run() {
     const resourceType = getInput('resourceType', { required: true });
     const resourceName = getInput('resourceName', { required: true });
 
-    const includeVersion = parseBool(getInput('includeVersion', { defaultValue: 'false' }));
-    const includeStatus  = parseBool(getInput('includeStatus', { defaultValue: 'false' }));
-
     const version = getInput('version', { required: includeVersion });
     const status  = getInput('status', { required: includeStatus });
 
