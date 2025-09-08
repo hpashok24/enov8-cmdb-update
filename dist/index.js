@@ -1,4 +1,4 @@
-\
+
 // Self-contained GitHub Action entry (no dependencies).
 // Reads inputs via environment variables (INPUT_<NAME>), performs HTTPS PUT to Enov8 CMDB.
 
