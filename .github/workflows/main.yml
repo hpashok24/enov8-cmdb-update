@@ -14,7 +14,7 @@ jobs:
           includeVersion: "true"
           version: "18.0.0"
           includeStatus: "true"
-          status: "Deployed"
+          status: "InOperation"
           app_id:  ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
