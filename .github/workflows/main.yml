@@ -12,8 +12,8 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
           includeVersion: "true"
-          version: "18.0.99"
-          includeStatus: "true"
+          version: "18.0.100"
+          includeStatus: "false"
           status: "InOperation"
           app_id:  ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
