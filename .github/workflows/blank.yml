@@ -29,4 +29,4 @@ jobs:
           includeVersion: true
           version: "18.0.0"
           includeStatus: true
-          status: "Deployed"
+          status: "InOperation"
