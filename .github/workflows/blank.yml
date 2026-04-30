@@ -1,7 +1,10 @@
 name: Enov8 CMDB Update
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
-  workflow_dispatch:   # manual trigger
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -21,4 +24,4 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: SystemInstance
-          resourceName: GDW (Prod)
+          resourceName: Python
