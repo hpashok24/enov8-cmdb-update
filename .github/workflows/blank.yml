@@ -17,7 +17,8 @@ jobs:
       - name: Run your action
         uses: hpashok24/enov8-cmdb-update@main
         with:
-          base_url: https://enov8-india.enov8.com/ecosystem/api/SystemInstance
-          user_id: ${{ secrets.ENOV8_USER }}
+          enov8_url: https://enov8-india.enov8.com/ecosystem/api/SystemInstance
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: SystemInstance
+          resourceName: GDW (Prod)
