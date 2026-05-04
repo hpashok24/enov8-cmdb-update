@@ -27,6 +27,6 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
           includeVersion: true
-          version: "18.0.10"
+          version: "18.0.11"
           includeStatus: true
-          status: "UnplannedOutage"
+          status: "InOperation"
