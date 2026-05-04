@@ -1,6 +1,4 @@
-
-// Self-contained GitHub Action entry (no dependencies).
-// Reads inputs via environment variables (INPUT_<NAME>), performs HTTPS PUT to Enov8 CMDB.
+// Self-contained GitHub Action entry (no dependencies)
 
 const https = require('https');
 const { URL } = require('url');
@@ -29,9 +27,9 @@ function fail(msg) {
   throw new Error(msg);
 }
 
-// Endpoint map: ResourceType -> API path
+// ✅ FIXED endpoint mapping
 const endpointMap = {
-  'Environment Instance': 'SystemInstance',
+  'Environment Instance': 'EnvironmentInstance',
   'System Component': 'SystemComponent',
   'System Interface': 'SystemInterface',
 };
@@ -49,20 +47,34 @@ function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeou
         ...(headers || {}),
       },
     };
+
     const req = https.request(opts, (res) => {
       const chunks = [];
       res.on('data', (d) => chunks.push(d));
       res.on('end', () => {
         const raw = Buffer.concat(chunks).toString('utf8');
+
         let parsed;
-        try { parsed = JSON.parse(raw); } catch { parsed = raw; }
-        const status = res.statusCode || 0;
-        if (status >= 200 && status < 300) return resolve(parsed);
-        return reject(new Error(`HTTP ${status} - ${raw}`));
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+
+        // ✅ Handle Enov8 response properly
+        if (parsed && parsed.success === true) {
+          return resolve(parsed);
+        }
+
+        return reject(new Error(`HTTP ${res.statusCode} - ${raw}`));
       });
     });
+
     req.on('error', reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`Timeout after ${timeoutMs}ms`)));
+    req.setTimeout(timeoutMs, () =>
+      req.destroy(new Error(`Timeout after ${timeoutMs}ms`))
+    );
+
     if (body) req.write(body);
     req.end();
   });
@@ -73,26 +85,32 @@ async function run() {
     const resourceType = getInput('resourceType', { required: true });
     const resourceName = getInput('resourceName', { required: true });
 
-    const version = getInput('version', { required: false });
-    const status  = getInput('status', { required: false})
+    const version = getInput('version');
+    const status = getInput('status');
 
-    const appId   = getInput('app_id', { required: true });
-    const appKey  = getInput('app_key', { required: true });
+    const appId = getInput('app_id', { required: true });
+    const appKey = getInput('app_key', { required: true });
     const baseUrl = getInput('enov8_url', { required: true }).replace(/\/+$/, '');
 
     const insecure = parseBool(getInput('insecure_skip_tls_verify', { defaultValue: 'false' }));
     if (insecure) {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-      info('Warning: TLS verification disabled (insecure_skip_tls_verify=true)');
+      info('⚠️ TLS verification disabled');
     }
 
     const apiPath = endpointMap[resourceType];
-    if (!apiPath) fail(`Unsupported resourceType: ${resourceType}. Allowed: ${Object.keys(endpointMap).join(' | ')}`);
+    if (!apiPath) {
+      fail(`Unsupported resourceType: ${resourceType}. Allowed: ${Object.keys(endpointMap).join(' | ')}`);
+    }
 
     const url = `${baseUrl}/api/${apiPath}`;
-    const payload = { 'Resource Name': resourceName };
+
+    const payload = {
+      'Resource Name': resourceName,
+    };
+
     if (version) payload.Version = version;
-    if (status)  payload.Status  = status;
+    if (status) payload.Status = status;
 
     info(`📡 PUT ${url}`);
     info(`📦 Payload:\n${JSON.stringify(payload, null, 2)}`);
@@ -103,10 +121,23 @@ async function run() {
       'app-key': appKey,
     };
 
-    const result = await httpRequest(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
-    info('✅ Enov8 CMDB updated successfully.');
-    // legacy set-output for compatibility with older workflows
-    console.log(`::set-output name=result::${JSON.stringify(result)}`);
+    const result = await httpRequest(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    // ✅ Better handling for "no update"
+    if (result.total_updated === 0) {
+      info('⚠️ No changes applied (resource already up-to-date)');
+    } else {
+      info('✅ Enov8 CMDB updated successfully.');
+    }
+
+    // ✅ New GitHub output format (no deprecated set-output)
+    const fs = require('fs');
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${JSON.stringify(result)}\n`);
+
   } catch (err) {
     fail(err && err.message ? err.message : String(err));
   }
