@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2.0.3
+        uses: hpashok24/enov8-cmdb-update@v2.0.4
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
