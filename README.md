@@ -1,63 +1,226 @@
-# Enov8 - CMDB Update (GitHub Action)
+# 📦 Enov8 – CMDB Update GitHub Action
 
-Dependency-free JavaScript Action to update Enov8 CMDB via **PUT**:
-- URL: `${enov8_url}/api/{SystemInstance|SystemComponent|SystemInterface}`
-- Headers: `user-id`, `app-id`, `app-key`
-- Payload:
-  ```json
-  {
-    "Resource Name": "<name>",
-    "Version": "...",  // optional or required if includeVersion=true
-    "Status": "..."    // optional or required if includeStatus=true
-  }
-  ```
+Update Enov8 CMDB resources (Environment Instance, System Component, System Interface) directly from your CI/CD pipelines.
 
-## Inputs
-- `resourceType` (required) — `Environment Instance` | `System Component` | `System Interface`
-- `resourceName` (required)
-- `version` (optional; required if `includeVersion=true`)
-- `status` (optional; required if `includeStatus=true`)
-- `includeVersion` (default `false`)
-- `includeStatus` (default `false`)
-- `app_id` (required)
-- `app_key` (required)
-- `enov8_url` (required)
-- `insecure_skip_tls_verify` (optional; default `false`)
+---
 
-## Example workflow
+## 🚀 Overview
+
+This GitHub Action enables you to:
+
+* 🔄 Update **Version**
+* 🚦 Update **Status**
+* 🎯 Target specific CMDB resources by name
+* ⚡ Automate Enov8 updates as part of your deployment pipeline
+
+---
+
+## 🧩 Supported Resource Types
+
+* `Environment Instance`
+* `System Component`
+* `System Interface`
+
+---
+
+## 📥 Inputs
+
+| Name             | Required | Description                     |
+| ---------------- | -------- | ------------------------------- |
+| `enov8_url`      | ✅        | Base Enov8 URL (without `/api`) |
+| `app_id`         | ✅        | Enov8 App ID                    |
+| `app_key`        | ✅        | Enov8 App Key                   |
+| `resourceType`   | ✅        | Resource type                   |
+| `resourceName`   | ✅        | Exact CMDB resource name        |
+| `includeVersion` | ❌        | Set `true` to update version    |
+| `version`        | ❌        | Version value                   |
+| `includeStatus`  | ❌        | Set `true` to update status     |
+| `status`         | ❌        | Status value                    |
+
+---
+
+# ⚙️ Setup Guide
+
+## Step 1 — Add GitHub Secrets
+
+Go to your repository:
+
+👉 **Settings → Secrets and variables → Actions**
+
+Click **New repository secret** and add:
+
+| Secret Name      | Example Value                             |
+| ---------------- | ----------------------------------------- |
+| `ENOV8_BASE_URL` | `https://enov8-india.enov8.com/ecosystem` |
+| `ENOV8_APP_ID`   | your_app_id                               |
+| `ENOV8_APP_KEY`  | your_app_key                              |
+
+---
+
+## 🔐 What are these secrets?
+
+* **ENOV8_BASE_URL** → Your Enov8 ecosystem base URL
+* **ENOV8_APP_ID / APP_KEY** → Credentials for API authentication
+
+⚠️ Never hardcode these values in workflows.
+
+---
+
+## Step 2 — Create Workflow
+
+Create a file:
+
+```bash
+.github/workflows/enov8.yml
+```
+
+---
+
+## Step 3 — Add Action to Workflow
+
 ```yaml
-name: Send Enov8 Update
+name: Enov8 CMDB Update
+
 on:
   workflow_dispatch:
 
 jobs:
-  notify-enov8:
+  update:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Update CMDB in Enov8
-        uses: hpashok24/enov8-cmdb-update@v1
+      - name: Enov8 - CMDB Update
+        uses: hpashok24/enov8-cmdb-update@v2
         with:
-          resourceType: "Environment Instance"
-          resourceName: "GDW Dev"
-          includeVersion: "true"
-          version: "18.0.0"
-          includeStatus: "true"
-          status: "Deployed"
-          app_id:  ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEV)"
+          includeVersion: true
+          version: "18.0.10"
+          includeStatus: true
+          status: "UnplannedOutage"
 ```
 
-## Release
-```bash
-git init
-git add .
-git commit -m "initial: enov8 cmdb update action"
-git branch -M main
-# Create the repo hpashok24/enov8-cmdb-update in GitHub UI or with gh CLI:
-# gh repo create hpashok24/enov8-cmdb-update --public --source=. --remote=origin --push
-git remote add origin https://github.com/hpashok24/enov8-cmdb-update.git
-git push -u origin main
-git tag -a v1 -m "v1"
-git push --follow-tags
+---
+
+## Step 4 — Run Workflow
+
+1. Go to **Actions** tab
+2. Select **Enov8 CMDB Update**
+3. Click **Run workflow**
+
+---
+
+## 🔍 Example Output
+
+```text
+📡 PUT https://.../api/SystemInstance
+📦 Payload ...
+✅ Enov8 CMDB updated successfully
 ```
+
+---
+
+# ⚠️ Important Notes
+
+### ✅ Correct URL format
+
+```
+https://<your-enov8-instance>/ecosystem
+```
+
+### ❌ Do NOT include
+
+```
+/api
+```
+
+---
+
+### ⚠️ Resource Name
+
+Must exactly match Enov8 CMDB entry:
+
+```
+GDW (DEV) ✅
+gdw dev ❌
+```
+
+---
+
+### ⚠️ Status Values
+
+Status must be valid in your Enov8 system:
+
+```
+UnplannedOutage ✅
+Deployed ❌ (if not configured)
+```
+
+---
+
+# 💡 Usage Examples
+
+## Update only version
+
+```yaml
+includeVersion: true
+version: "18.0.10"
+includeStatus: false
+```
+
+---
+
+## Update only status
+
+```yaml
+includeVersion: false
+includeStatus: true
+status: "UnplannedOutage"
+```
+
+---
+
+## Full update
+
+```yaml
+includeVersion: true
+includeStatus: true
+```
+
+---
+
+# 🐛 Troubleshooting
+
+### ❌ HTTP 400 / Invalid class
+
+* Wrong `resourceType`
+
+---
+
+### ❌ No update
+
+* Resource name mismatch
+
+---
+
+### ❌ Authentication failed
+
+* Check secrets
+
+---
+
+# 🚀 Use Cases
+
+* CI/CD deployment tracking
+* Environment status automation
+* Release version tracking
+* DevOps CMDB integration
+
+---
+
+# 📄 License
+
+MIT License
