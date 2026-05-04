@@ -51,7 +51,7 @@ Click **New repository secret** and add:
 
 | Secret Name      | Example Value                             |
 | ---------------- | ----------------------------------------- |
-| `ENOV8_BASE_URL` | `https://enov8-india.enov8.com/ecosystem` |
+| `ENOV8_BASE_URL` | `https://<your-org>/ecosystem` |
 | `ENOV8_APP_ID`   | your_app_id                               |
 | `ENOV8_APP_KEY`  | your_app_key                              |
 
