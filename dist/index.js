@@ -1,7 +1,8 @@
-// Self-contained GitHub Action entry (no dependencies)
+// Self-contained GitHub Action (no dependencies)
 
 const https = require('https');
 const { URL } = require('url');
+const fs = require('fs');
 
 function getInput(name, { required = false, defaultValue = '' } = {}) {
   const v = process.env[`INPUT_${name.toUpperCase()}`] || '';
@@ -27,9 +28,9 @@ function fail(msg) {
   throw new Error(msg);
 }
 
-// ✅ FIXED endpoint mapping
+// ✅ Default mapping (your environment uses SystemInstance)
 const endpointMap = {
-  'Environment Instance': 'EnvironmentInstance',
+  'Environment Instance': 'SystemInstance',
   'System Component': 'SystemComponent',
   'System Interface': 'SystemInterface',
 };
@@ -37,6 +38,7 @@ const endpointMap = {
 function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeoutMs = 20000 }) {
   return new Promise((resolve, reject) => {
     const u = new URL(urlStr);
+
     const opts = {
       method,
       hostname: u.hostname,
@@ -50,7 +52,9 @@ function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeou
 
     const req = https.request(opts, (res) => {
       const chunks = [];
+
       res.on('data', (d) => chunks.push(d));
+
       res.on('end', () => {
         const raw = Buffer.concat(chunks).toString('utf8');
 
@@ -61,7 +65,7 @@ function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeou
           parsed = null;
         }
 
-        // ✅ Handle Enov8 response properly
+        // ✅ Enov8 returns success=true even with HTTP 400
         if (parsed && parsed.success === true) {
           return resolve(parsed);
         }
@@ -90,17 +94,23 @@ async function run() {
 
     const appId = getInput('app_id', { required: true });
     const appKey = getInput('app_key', { required: true });
+
     const baseUrl = getInput('enov8_url', { required: true }).replace(/\/+$/, '');
 
+    // ✅ Optional override (important for portability)
+    const overrideApiPath = getInput('apiPath');
+
+    const apiPath = overrideApiPath || endpointMap[resourceType];
+
+    if (!apiPath) {
+      fail(`Unsupported resourceType: ${resourceType}. Allowed: ${Object.keys(endpointMap).join(' | ')}`);
+    }
+
     const insecure = parseBool(getInput('insecure_skip_tls_verify', { defaultValue: 'false' }));
+
     if (insecure) {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
       info('⚠️ TLS verification disabled');
-    }
-
-    const apiPath = endpointMap[resourceType];
-    if (!apiPath) {
-      fail(`Unsupported resourceType: ${resourceType}. Allowed: ${Object.keys(endpointMap).join(' | ')}`);
     }
 
     const url = `${baseUrl}/api/${apiPath}`;
@@ -127,15 +137,14 @@ async function run() {
       body: JSON.stringify(payload),
     });
 
-    // ✅ Better handling for "no update"
+    // ✅ Better UX handling
     if (result.total_updated === 0) {
-      info('⚠️ No changes applied (resource already up-to-date)');
+      info('⚠️ No changes applied (already up-to-date or invalid field)');
     } else {
       info('✅ Enov8 CMDB updated successfully.');
     }
 
-    // ✅ New GitHub output format (no deprecated set-output)
-    const fs = require('fs');
+    // ✅ Modern GitHub output
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${JSON.stringify(result)}\n`);
 
   } catch (err) {
