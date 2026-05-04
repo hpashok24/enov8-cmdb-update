@@ -89,9 +89,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2
-        with:
+      -   name: Enov8 - CMDB Update
+          uses: hpashok24/enov8-cmdb-update@v2.0.1
+          with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
