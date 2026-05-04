@@ -92,15 +92,15 @@ jobs:
       -   name: Enov8 - CMDB Update
           uses: hpashok24/enov8-cmdb-update@v2.0.1
           with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "GDW (DEV)"
-          includeVersion: true
-          version: "18.0.10"
-          includeStatus: true
-          status: "UnplannedOutage"
+            enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+            app_id: ${{ secrets.ENOV8_APP_ID }}
+            app_key: ${{ secrets.ENOV8_APP_KEY }}
+            resourceType: "Environment Instance"
+            resourceName: "GDW (DEV)"
+            includeVersion: true
+            version: "18.0.10"
+            includeStatus: true
+            status: "UnplannedOutage"
 ```
 
 ---
