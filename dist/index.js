@@ -45,7 +45,7 @@ function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeou
       port: u.port || 443,
       path: u.pathname + u.search,
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
         ...(headers || {}),
       },
     };
@@ -134,7 +134,7 @@ async function run() {
     const result = await httpRequest(url, {
       method: 'PUT',
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload, null, 2),
     });
 
     // ✅ Better UX handling
