@@ -12,6 +12,7 @@ on:
 jobs:
   update-cmdb:
     runs-on: ubuntu-latest
+    environment: dev
 
     steps:
       # Remove this if not needed
