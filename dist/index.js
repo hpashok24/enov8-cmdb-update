@@ -1,154 +1,104 @@
-// Self-contained GitHub Action (no dependencies)
-
 const https = require('https');
 const { URL } = require('url');
 const fs = require('fs');
 
-function getInput(name, { required = false, defaultValue = '' } = {}) {
+function getInput(name, required = false) {
   const v = process.env[`INPUT_${name.toUpperCase()}`] || '';
   if (required && !v.trim()) {
-    fail(`Input required and not supplied: ${name}`);
+    throw new Error(`Missing input: ${name}`);
   }
-  return v.trim() || defaultValue;
+  return v.trim();
 }
 
-function parseBool(v, d = false) {
-  if (typeof v === 'boolean') return v;
-  if (typeof v !== 'string') return d;
-  return ['1', 'true', 'yes', 'on'].includes(v.trim().toLowerCase());
-}
-
-function info(msg) {
-  console.log(msg);
-}
-
-function fail(msg) {
-  console.error(msg);
-  process.exitCode = 1;
-  throw new Error(msg);
-}
-
-// ✅ Default mapping (your environment uses SystemInstance)
-const endpointMap = {
-  'Environment Instance': 'SystemInstance',
-  'System Component': 'SystemComponent',
-  'System Interface': 'SystemInterface',
-};
-
-function httpRequest(urlStr, { method = 'PUT', headers = {}, body = null, timeoutMs = 20000 }) {
+function request(urlStr, payload, headers) {
   return new Promise((resolve, reject) => {
-    const u = new URL(urlStr);
+    const url = new URL(urlStr);
 
-    const opts = {
-      method,
-      hostname: u.hostname,
-      port: u.port || 443,
-      path: u.pathname + u.search,
-      headers: {
-        'Content-Type': 'text/plain',
-        ...(headers || {}),
-      },
+    const options = {
+      method: 'PUT',
+      hostname: url.hostname,
+      path: url.pathname,
+      headers
     };
 
-    const req = https.request(opts, (res) => {
-      const chunks = [];
-
-      res.on('data', (d) => chunks.push(d));
-
-      res.on('end', () => {
-        const raw = Buffer.concat(chunks).toString('utf8');
-
-        let parsed;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          parsed = null;
-        }
-
-        // ✅ Enov8 returns success=true even with HTTP 400
-        if (parsed && parsed.success === true) {
-          return resolve(parsed);
-        }
-
-        return reject(new Error(`HTTP ${res.statusCode} - ${raw}`));
-      });
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (d) => data += d);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
     });
 
     req.on('error', reject);
-    req.setTimeout(timeoutMs, () =>
-      req.destroy(new Error(`Timeout after ${timeoutMs}ms`))
-    );
 
-    if (body) req.write(body);
+    // 🔥 IMPORTANT: just send string (no tricks)
+    req.write(payload);
     req.end();
   });
 }
 
 async function run() {
   try {
-    const resourceType = getInput('resourceType', { required: true });
-    const resourceName = getInput('resourceName', { required: true });
+    const baseUrl = getInput('enov8_url', true).replace(/\/+$/, '');
+    const resourceName = getInput('resourceName', true);
+    const resourceType = getInput('resourceType', true);
 
     const version = getInput('version');
     const status = getInput('status');
 
-    const appId = getInput('app_id', { required: true });
-    const appKey = getInput('app_key', { required: true });
+    const appId = getInput('app_id', true);
+    const appKey = getInput('app_key', true);
 
-    const baseUrl = getInput('enov8_url', { required: true }).replace(/\/+$/, '');
+    // 🔥 your env uses SystemInstance
+    const endpointMap = {
+      'Environment Instance': 'SystemInstance',
+      'System Component': 'SystemComponent',
+      'System Interface': 'SystemInterface',
+    };
 
-    // ✅ Optional override (important for portability)
-    const overrideApiPath = getInput('apiPath');
-
-    const apiPath = overrideApiPath || endpointMap[resourceType];
-
+    const apiPath = endpointMap[resourceType];
     if (!apiPath) {
-      fail(`Unsupported resourceType: ${resourceType}. Allowed: ${Object.keys(endpointMap).join(' | ')}`);
-    }
-
-    const insecure = parseBool(getInput('insecure_skip_tls_verify', { defaultValue: 'false' }));
-
-    if (insecure) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-      info('⚠️ TLS verification disabled');
+      throw new Error(`Invalid resourceType: ${resourceType}`);
     }
 
     const url = `${baseUrl}/api/${apiPath}`;
 
-    const payload = {
-      'Resource Name': resourceName,
+    // ✅ Keep payload simple (like Python)
+    const payloadObj = {
+      "Resource Name": resourceName
     };
 
-    if (version) payload.Version = version;
-    if (status) payload.Status = status;
+    if (status) payloadObj["Status"] = status;
+    if (version) payloadObj["Version"] = version;
 
-    info(`📡 PUT ${url}`);
-    info(`📦 Payload:\n${JSON.stringify(payload, null, 2)}`);
+    const payload = JSON.stringify(payloadObj);
+
+    console.log(`📡 PUT ${url}`);
+    console.log(`📦 Payload:\n${payload}`);
 
     const headers = {
+      'Content-Type': 'text/plain',
       'user-id': appId,
       'app-id': appId,
-      'app-key': appKey,
+      'app-key': appKey
     };
 
-    const result = await httpRequest(url, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(payload, null, 2),
-    });
+    const res = await request(url, payload, headers);
 
-    // ✅ Better UX handling
-    if (result.total_updated === 0) {
-      info('⚠️ No changes applied (already up-to-date or invalid field)');
+    console.log(`📨 Response:\n${res.body}`);
+
+    let parsed;
+    try { parsed = JSON.parse(res.body); } catch {}
+
+    if (parsed && parsed.total_updated > 0) {
+      console.log('✅ Updated successfully');
     } else {
-      info('✅ Enov8 CMDB updated successfully.');
+      console.log('⚠️ No update (check values)');
     }
 
-    // ✅ Modern GitHub output
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${JSON.stringify(result)}\n`);
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${res.body}\n`);
 
   } catch (err) {
-    fail(err && err.message ? err.message : String(err));
+    console.error(err.message);
+    process.exit(1);
   }
 }
 
