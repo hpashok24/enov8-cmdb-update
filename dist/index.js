@@ -24,13 +24,23 @@ function request(urlStr, payload, headers) {
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', (d) => data += d);
-      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+
+      res.on('end', () => {
+        let parsed;
+        try { parsed = JSON.parse(data); } catch {}
+
+        resolve({
+          status: res.statusCode,
+          body: data,
+          parsed
+        });
+      });
     });
 
     req.on('error', reject);
 
-    // 🔥 IMPORTANT: just send string (no tricks)
-    req.write(payload);
+    // ✅ IMPORTANT: send raw string like Python
+    req.write(payload, 'utf8');
     req.end();
   });
 }
@@ -47,7 +57,7 @@ async function run() {
     const appId = getInput('app_id', true);
     const appKey = getInput('app_key', true);
 
-    // 🔥 your env uses SystemInstance
+    // ✅ Your environment mapping
     const endpointMap = {
       'Environment Instance': 'SystemInstance',
       'System Component': 'SystemComponent',
@@ -61,7 +71,7 @@ async function run() {
 
     const url = `${baseUrl}/api/${apiPath}`;
 
-    // ✅ Keep payload simple (like Python)
+    // ✅ STRICT payload (NO System ID)
     const payloadObj = {
       "Resource Name": resourceName
     };
@@ -74,8 +84,10 @@ async function run() {
     console.log(`📡 PUT ${url}`);
     console.log(`📦 Payload:\n${payload}`);
 
+    // ✅ IMPORTANT FIX: add Content-Length
     const headers = {
       'Content-Type': 'text/plain',
+      'Content-Length': Buffer.byteLength(payload),
       'user-id': appId,
       'app-id': appId,
       'app-key': appKey
@@ -85,13 +97,13 @@ async function run() {
 
     console.log(`📨 Response:\n${res.body}`);
 
-    let parsed;
-    try { parsed = JSON.parse(res.body); } catch {}
-
-    if (parsed && parsed.total_updated > 0) {
-      console.log('✅ Updated successfully');
+    // ✅ Smart handling
+    if (res.parsed && res.parsed.total_updated > 0) {
+      console.log('✅ Enov8 CMDB updated successfully');
+    } else if (res.parsed && res.parsed.success === true) {
+      console.log('⚠️ No update (already up-to-date or invalid field)');
     } else {
-      console.log('⚠️ No update (check values)');
+      throw new Error(`❌ API Error: ${res.body}`);
     }
 
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${res.body}\n`);
