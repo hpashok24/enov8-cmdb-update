@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2.2.0
+        uses: hpashok24/enov8-cmdb-update@v2.0.8
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
