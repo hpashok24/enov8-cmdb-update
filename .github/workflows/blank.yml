@@ -27,8 +27,8 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
           resourceName: "Web Portal"
-          version: "4.9"
-          status: ""
+          version: "4.91"
+          status: "InOperation"
           # ✅ Required for MicroService
           systemInstance: "GDW (DEV)"
          
