@@ -25,10 +25,10 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "MicroService"
-          resourceName: "Web Portal"
-          version: "4.91"
-          status: "InOperation"
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEV)"
+          version: "18.91"
+          status: "UnplannedOutage"
           # ✅ Required for MicroService
-          systemInstance: "GDW (DEV)"
+          systemInstance: ""
          
