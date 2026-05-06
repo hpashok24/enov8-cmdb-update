@@ -19,15 +19,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2.0.7
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
-          version: "18.92"
+          version: "18.99"
           status: "InOperation"
           # ✅ Required for MicroService
           systemInstance: ""
