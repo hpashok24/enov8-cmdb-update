@@ -4,9 +4,11 @@ const fs = require('fs');
 
 function getInput(name, required = false) {
   const v = process.env[`INPUT_${name.toUpperCase()}`] || '';
+
   if (required && !v.trim()) {
     throw new Error(`Missing input: ${name}`);
   }
+
   return v.trim();
 }
 
@@ -23,11 +25,15 @@ function request(urlStr, payload, headers) {
 
     const req = https.request(options, (res) => {
       let data = '';
+
       res.on('data', (d) => data += d);
 
       res.on('end', () => {
         let parsed;
-        try { parsed = JSON.parse(data); } catch {}
+
+        try {
+          parsed = JSON.parse(data);
+        } catch {}
 
         resolve({
           status: res.statusCode,
@@ -39,7 +45,7 @@ function request(urlStr, payload, headers) {
 
     req.on('error', reject);
 
-    // ✅ IMPORTANT: send raw string like Python
+    // ✅ Send raw payload string
     req.write(payload, 'utf8');
     req.end();
   });
@@ -47,6 +53,7 @@ function request(urlStr, payload, headers) {
 
 async function run() {
   try {
+
     const baseUrl = getInput('enov8_url', true).replace(/\/+$/, '');
     const resourceName = getInput('resourceName', true);
     const resourceType = getInput('resourceType', true);
@@ -57,34 +64,58 @@ async function run() {
     const appId = getInput('app_id', true);
     const appKey = getInput('app_key', true);
 
-    // ✅ Your environment mapping
+    // ✅ Required only for MicroService
+    const systemInstance = getInput('systemInstance');
+
+    // ✅ Endpoint mappings
     const endpointMap = {
       'Environment Instance': 'SystemInstance',
       'System Component': 'SystemComponent',
       'System Interface': 'SystemInterface',
+      'MicroService': 'MicroService'
     };
 
     const apiPath = endpointMap[resourceType];
+
     if (!apiPath) {
       throw new Error(`Invalid resourceType: ${resourceType}`);
     }
 
+    // ✅ Validation for MicroService
+    if (resourceType === 'MicroService' && !systemInstance) {
+      throw new Error('systemInstance is required when resourceType is MicroService');
+    }
+
     const url = `${baseUrl}/api/${apiPath}`;
 
-    // ✅ STRICT payload (NO System ID)
-    const payloadObj = {
-      "Resource Name": resourceName
-    };
+    // ✅ Dynamic payload handling
+    const payloadObj = {};
 
-    if (status) payloadObj["Status"] = status;
-    if (version) payloadObj["Version"] = version;
+    if (resourceType === 'MicroService') {
+
+      payloadObj["MicroService Name"] = resourceName;
+      payloadObj["SystemInstance"] = systemInstance;
+
+    } else {
+
+      payloadObj["Resource Name"] = resourceName;
+
+    }
+
+    // ✅ Optional fields
+    if (status) {
+      payloadObj["Status"] = status;
+    }
+
+    if (version) {
+      payloadObj["Version"] = version;
+    }
 
     const payload = JSON.stringify(payloadObj);
 
     console.log(`📡 PUT ${url}`);
     console.log(`📦 Payload:\n${payload}`);
 
-    // ✅ IMPORTANT FIX: add Content-Length
     const headers = {
       'Content-Type': 'text/plain',
       'Content-Length': Buffer.byteLength(payload),
@@ -97,20 +128,32 @@ async function run() {
 
     console.log(`📨 Response:\n${res.body}`);
 
-    // ✅ Smart handling
+    // ✅ Smart response handling
     if (res.parsed && res.parsed.total_updated > 0) {
+
       console.log('✅ Enov8 CMDB updated successfully');
+
     } else if (res.parsed && res.parsed.success === true) {
-      console.log('⚠️ No update (already up-to-date or invalid field)');
+
+      console.log('⚠️ No update applied (already up-to-date or invalid field)');
+
     } else {
+
       throw new Error(`❌ API Error: ${res.body}`);
+
     }
 
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, `result=${res.body}\n`);
+    // ✅ GitHub Action output
+    fs.appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `result=${JSON.stringify(res.parsed || res.body)}\n`
+    );
 
   } catch (err) {
+
     console.error(err.message);
     process.exit(1);
+
   }
 }
 
