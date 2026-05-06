@@ -1,44 +1,46 @@
 name: 'Enov8 - CMDB Update'
-description: 'Update Enov8 CMDB (Environment Instance, System Component, System Interface) via PUT.'
+description: 'Update Enov8 CMDB resources (Environment Instance, System Component, System Interface, MicroService) via GitHub Actions.'
 author: 'hpashok24'
+
 branding:
-  icon: 'database'
-  color: 'blue'
+  icon: 'layers'
+  color: 'green'
 
 inputs:
   resourceType:
-    description: 'Environment Instance | System Component | System Interface'
+    description: 'Supported values: Environment Instance | System Component | System Interface | MicroService'
     required: true
+
   resourceName:
-    description: 'Name of the resource to update (goes to "Resource Name")'
+    description: 'Exact name of the Enov8 resource to update'
     required: true
+
+  systemInstance:
+    description: 'Required when resourceType is MicroService'
+    required: false
+
   version:
-    description: 'Optional version string to include'
+    description: 'Optional version value to update'
     required: false
+
   status:
-    description: 'Optional status string to include'
+    description: 'Optional status value to update'
     required: false
-  includeVersion:
-    description: 'If true, require & include version'
-    required: false
-    default: 'false'
-  includeStatus:
-    description: 'If true, require & include status'
-    required: false
-    default: 'false'
 
   app_id:
     description: 'Enov8 App ID'
     required: true
+
   app_key:
     description: 'Enov8 App Key'
     required: true
+
   enov8_url:
-    description: 'Base URL of your Enov8 instance (e.g. https://yourcompany.enov8.cloud/ecosystem)'
+    description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem)'
     required: true
 
   insecure_skip_tls_verify:
-    description: 'true to skip TLS verification (NOT recommended)'
+    description: 'Set to true to skip TLS verification (not recommended)'
     required: false
     default: 'false'
 
