@@ -20,14 +20,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2.0.6
+        uses: hpashok24/enov8-cmdb-update@v2.0.7
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
-          includeVersion: true
-          version: "18.0.12"
-          includeStatus: true
-          status: "UnplannedOutage"
+          version: "18.0.14"
+          status: "InOperation"
