@@ -36,7 +36,7 @@ This GitHub Action enables you to:
 | `resourceName` | ✅ | Exact Enov8 resource name |
 | `version` | ❌ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
-| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Supported keys: `System`, `Environment`, `Assigned To` (all by name — resolved to ECO IDs automatically). `Organisation` is resolved automatically and never needs to be supplied. |
+| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Supported keys: `System`, `Environment`, `Assigned To`. |
 
 ---
 
