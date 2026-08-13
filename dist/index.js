@@ -119,9 +119,6 @@ async function run() {
     // ✅ Only used when the resource doesn't exist yet — resolved to ECO IDs and used to create it
     const metadataRaw = getInput('metadata');
 
-    // ✅ Only required on create (Enov8 rejects create without a Status) — ignored on update
-    const status = getInput('status');
-
     // ✅ Endpoint mappings
     const endpointMap = {
       'Environment Instance': 'SystemInstance',
@@ -195,16 +192,18 @@ async function run() {
 
     console.log(`⚠️ No existing "${resourceName}" found — attempting to create it using metadata`);
 
-    if (!status) {
-      throw new Error(`status is required to create "${resourceName}" (Enov8 rejects create without a Status)`);
-    }
-
     let metadata;
 
     try {
       metadata = JSON.parse(metadataRaw);
     } catch (e) {
       throw new Error(`Invalid metadata JSON: ${e.message}`);
+    }
+
+    const status = metadata['Status'];
+
+    if (!status) {
+      throw new Error(`metadata.Status is required to create "${resourceName}" (Enov8 rejects create without a Status)`);
     }
 
     const createPayloadObj = {
@@ -217,7 +216,7 @@ async function run() {
     }
 
     for (const [field, name] of Object.entries(metadata)) {
-      if (!name) continue;
+      if (field === 'Status' || !name) continue;
       createPayloadObj[field] = await resolveEcoId(baseUrl, headers, field, name);
     }
 

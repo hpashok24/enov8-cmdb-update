@@ -33,6 +33,7 @@ jobs:
           # ✅ Optional — only used to create "GDW (DEV)" if it doesn't already exist
           metadata: |
             {
+              "Status": "InOperation",
               "System": "GDW",
               "Environment": "DEV Env",
               "Assigned To": "Support Team"

@@ -36,7 +36,7 @@ This GitHub Action enables you to:
 | `resourceName` | ✅ | Exact Enov8 resource name |
 | `version` | ❌ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
-| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Supported keys: `System`, `Environment`, `Assigned To` (all by name — resolved to ECO IDs automatically). `Organisation` is resolved automatically and never needs to be supplied. |
+| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Requires `Status` (Enov8 rejects create without one). Supported keys: `Status`, `System`, `Environment`, `Assigned To` (`System`/`Environment`/`Assigned To` are by name — resolved to ECO IDs automatically). `Organisation` is resolved automatically and never needs to be supplied. |
 
 ---
 
@@ -136,6 +136,7 @@ If `resourceName` doesn't exist yet, supply `metadata` (names only — no ECO ID
 
           metadata: |
             {
+              "Status": "InOperation",
               "System": "GDW",
               "Environment": "DEV Env",
               "Assigned To": "Support Team"
@@ -238,6 +239,7 @@ version: "18.0.12"
 version: "18.0.12"
 metadata: |
   {
+    "Status": "InOperation",
     "System": "GDW",
     "Environment": "DEV Env",
     "Assigned To": "Support Team"
@@ -258,8 +260,9 @@ metadata: |
 
 ## ❌ Create failed / could not resolve metadata name
 
+- Verify `metadata.Status` is set — Enov8 rejects create without it
 - Verify the `System`, `Environment`, or `Assigned To` name in `metadata` matches exactly (these are looked up by name against Enov8)
-- Only `System`, `Environment`, and `Assigned To` are supported keys in `metadata` — do not include `Organisation`, it's resolved automatically
+- Only `Status`, `System`, `Environment`, and `Assigned To` are supported keys in `metadata` — do not include `Organisation`, it's resolved automatically
 
 ---
 
