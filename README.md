@@ -1,6 +1,6 @@
-# 📦 Enov8 – CMDB Update GitHub Action
+# 📦 Enov8 – Deployment Version Update GitHub Action
 
-Update Enov8 CMDB resources, environments, and microservices directly from your CI/CD pipelines using GitHub Actions.
+Update the version of Enov8 CMDB resources, environments, and microservices directly from your CI/CD pipelines using GitHub Actions — creating the resource automatically if it doesn't exist yet.
 
 ---
 
@@ -9,8 +9,8 @@ Update Enov8 CMDB resources, environments, and microservices directly from your 
 This GitHub Action enables you to:
 
 - 🔄 Update resource versions
-- 🚦 Update environment or component status
 - 🎯 Target specific Enov8 resources by name
+- 🆕 Automatically create a resource (by name lookup, no ECO IDs required) if it doesn't already exist
 - ⚡ Automate Enov8 updates as part of deployment pipelines
 - 🧩 Update MicroServices linked to System Instances
 
@@ -35,8 +35,8 @@ This GitHub Action enables you to:
 | `resourceType` | ✅ | Resource type |
 | `resourceName` | ✅ | Exact Enov8 resource name |
 | `version` | ❌ | Version value to update |
-| `status` | ❌ | Status value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
+| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Supported keys: `System`, `Environment`, `Assigned To` (all by name — resolved to ECO IDs automatically). `Organisation` is resolved automatically and never needs to be supplied. |
 
 ---
 
@@ -103,8 +103,8 @@ jobs:
     environment: dev
 
     steps:
-      - name: Enov8 - CMDB Update
-        uses: hpashok24/enov8-cmdb-update@v2.0.8
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -114,8 +114,35 @@ jobs:
           resourceName: "GDW (DEV)"
 
           version: "18.0.12"
-          status: "UnplannedOutage"
 ```
+
+---
+
+# 🆕 Example — Create Environment Instance If Missing
+
+If `resourceName` doesn't exist yet, supply `metadata` (names only — no ECO IDs) and the action will create it:
+
+```yaml
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEV)"
+          version: "18.0.12"
+
+          metadata: |
+            {
+              "System": "GDW",
+              "Environment": "DEV Env",
+              "Assigned To": "Support Team"
+            }
+```
+
+`Organisation` is resolved automatically — do not include it in `metadata`.
 
 ---
 
@@ -195,20 +222,6 @@ gdw dev     ❌
 
 ---
 
-# ⚠️ Status Values
-
-Status values must already exist in your Enov8 configuration.
-
-Examples:
-
-```text
-InOperation
-PlannedOutage
-UnplannedOutage
-```
-
----
-
 # 💡 Usage Examples
 
 ## Update only version
@@ -219,19 +232,16 @@ version: "18.0.12"
 
 ---
 
-## Update only status
-
-```yaml
-status: "UnplannedOutage"
-```
-
----
-
-## Update version and status
+## Create the resource if it doesn't exist
 
 ```yaml
 version: "18.0.12"
-status: "UnplannedOutage"
+metadata: |
+  {
+    "System": "GDW",
+    "Environment": "DEV Env",
+    "Assigned To": "Support Team"
+  }
 ```
 
 ---
@@ -241,8 +251,15 @@ status: "UnplannedOutage"
 ## ❌ No update applied
 
 - Verify resource name spelling
-- Check if values are already up-to-date
+- Check if the version is already up-to-date
 - Confirm correct GitHub environment secrets are being used
+
+---
+
+## ❌ Create failed / could not resolve metadata name
+
+- Verify the `System`, `Environment`, or `Assigned To` name in `metadata` matches exactly (these are looked up by name against Enov8)
+- Only `System`, `Environment`, and `Assigned To` are supported keys in `metadata` — do not include `Organisation`, it's resolved automatically
 
 ---
 
@@ -278,10 +295,10 @@ systemInstance: "GDW (DEV)"
 # 🚀 Common Use Cases
 
 - CI/CD deployment tracking
-- Environment status automation
 - Automated version management
 - DevOps CMDB integration
 - MicroService deployment tracking
+- Auto-provisioning environment instances on first deploy
 
 ---
 

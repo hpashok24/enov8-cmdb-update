@@ -1,5 +1,5 @@
-name: 'Enov8 - CMDB Update'
-description: 'Update Enov8 CMDB resources (Environment Instance, System Component, System Interface, MicroService) via GitHub Actions.'
+name: 'Enov8 - Deployment Version Update'
+description: 'Update (or create) Enov8 CMDB resources (Environment Instance, System Component, System Interface, MicroService) version via GitHub Actions.'
 author: 'hpashok24'
 
 branding:
@@ -23,8 +23,12 @@ inputs:
     description: 'Optional version value to update'
     required: false
 
+  metadata:
+    description: 'Optional JSON object used only when resourceName does not exist yet, to create it. Supported keys: "System", "Environment", "Assigned To" (all by name — resolved to ECO IDs automatically; Organisation is resolved automatically and does not need to be supplied). Example: {"System": "GDW", "Environment": "DEV Env", "Assigned To": "Support Team"}'
+    required: false
+
   status:
-    description: 'Optional status value to update'
+    description: 'Required only when resourceName does not exist yet and is being created (Enov8 requires a Status on create). Ignored when updating an existing resource.'
     required: false
 
   app_id:

@@ -28,7 +28,13 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
           version: "18.99"
-          status: "InOperation"
           # ✅ Required for MicroService
           systemInstance: ""
-         
+          # ✅ Optional — only used to create "GDW (DEV)" if it doesn't already exist
+          metadata: |
+            {
+              "System": "GDW",
+              "Environment": "DEV Env",
+              "Assigned To": "Support Team"
+            }
+
