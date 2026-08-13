@@ -20,7 +20,7 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "GDW (SIT25)"
 
-          version: "18.0.12"
+          version: "18.0.13"
           status: "InOperation"
 
           metadata: |
