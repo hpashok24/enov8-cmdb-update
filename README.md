@@ -10,7 +10,7 @@ This GitHub Action enables you to:
 
 - 🔄 Update resource versions
 - 🎯 Target specific Enov8 resources by name
-- 🆕 Automatically create a resource (by name lookup, no ECO IDs required) if it doesn't already exist
+- 🆕 Automatically create a resource (referenced entities looked up by name) if it doesn't already exist
 - ⚡ Automate Enov8 updates as part of deployment pipelines
 - 🧩 Update MicroServices linked to System Instances
 
@@ -37,7 +37,7 @@ This GitHub Action enables you to:
 | `version` | ❌ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
 | `autocreate` | ❌ | `"true"` to create `resourceName` when it doesn't exist (using `metadata`). Defaults to `"false"` — a not-found resource is always an error unless this is set. |
-| `metadata` | ❌ | Required when `autocreate` is `"true"` and `resourceName` doesn't exist yet. Requires `Status` (Enov8 rejects create without one). Supported keys: `Status`, `System`, `Environment`, `Business Unit`, `Type`, `Core`. `System`/`Environment` are by name — resolved to ECO IDs automatically. `Business Unit`, `Type` (default `"Other"`), and `Core` (default `"False"`) are only used if `System` also doesn't exist and needs creating. `Assigned To` and `Organisation` are always resolved automatically and must not be supplied. |
+| `metadata` | ❌ | Required when `autocreate` is `"true"` and `resourceName` doesn't exist yet. Requires `Status` (Enov8 rejects create without one). Supported keys: `Status`, `System`, `Environment`, `Business Unit`, `Type`, `Core`. `System`/`Environment` are by name — resolved automatically. `Business Unit`, `Type` (default `"Other"`), and `Core` (default `"False"`) are only used if `System` also doesn't exist and needs creating. `Assigned To` and `Organisation` are always resolved automatically and must not be supplied. |
 
 ---
 
@@ -121,7 +121,7 @@ jobs:
 
 # 🆕 Example — Create Environment Instance If Missing
 
-If `resourceName` doesn't exist yet, set `autocreate: "true"` and supply `metadata` (names only — no ECO IDs) and the action will create it:
+If `resourceName` doesn't exist yet, set `autocreate: "true"` and supply `metadata` (by name — no manual IDs needed) and the action will create it:
 
 ```yaml
       - name: Enov8 - Deployment Version Update
