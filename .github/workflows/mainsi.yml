@@ -21,7 +21,7 @@ jobs:
           resourceName: "NewSystem (SIT3)"
 
           version: "1.0.1"
-          autocreate: "false"
+          autocreate: "true"
 
           metadata: |
             {
