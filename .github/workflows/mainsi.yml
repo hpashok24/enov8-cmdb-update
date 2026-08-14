@@ -18,14 +18,17 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
 
           resourceType: "Environment Instance"
-          resourceName: "GDW (SIT30)"
+          resourceName: "NewSystem (SIT)"
 
-          version: "18.0.15"
+          version: "1.0.0"
           autocreate: "true"
 
           metadata: |
             {
               "Status": "InOperation",
-              "System": "GDW",
-              "Environment": "SIT Env"
+              "System": "NewSystem",
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
+              "Type": "Application",
+              "Core": "True"
             }
