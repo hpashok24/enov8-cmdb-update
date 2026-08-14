@@ -20,7 +20,7 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "NewSystem (SIT3)"
 
-          version: "1.0.1"
+          version: "1.0.22"
           autocreate: "true"
 
           metadata: |
