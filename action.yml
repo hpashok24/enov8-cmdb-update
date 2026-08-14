@@ -23,8 +23,13 @@ inputs:
     description: 'Optional version value to update'
     required: false
 
+  autocreate:
+    description: 'When "true", create resourceName if it does not already exist (using metadata). When "false" (default), a not-found resourceName is always an error.'
+    required: false
+    default: 'false'
+
   metadata:
-    description: 'Optional JSON object used only when resourceName does not exist yet, to create it. Requires "Status" (Enov8 rejects create without one). Supported keys: "Status", "System", "Environment", "Assigned To" ("System"/"Environment"/"Assigned To" are by name — resolved to ECO IDs automatically; Organisation is resolved automatically and does not need to be supplied). Example: {"Status": "InOperation", "System": "GDW", "Environment": "DEV Env", "Assigned To": "Support Team"}'
+    description: 'Required when autocreate is true and resourceName does not exist yet. Requires "Status" (Enov8 rejects create without one). Supported keys: "Status", "System", "Environment", "Business Unit", "Type", "Core". "System"/"Environment" are by name — resolved to ECO IDs automatically. "Business Unit", "Type" (default "Other"), and "Core" (default "False") are only used if "System" also does not exist and must be created. "Assigned To" and "Organisation" are always resolved automatically (Assigned To = the Group flagged "Env Management"; Organisation = the tenant single Organisation) and must not be supplied. Example: {"Status": "InOperation", "System": "GDW", "Environment": "DEV Env", "Business Unit": "IT", "Type": "Application", "Core": "True"}'
     required: false
 
   app_id:

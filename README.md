@@ -36,7 +36,8 @@ This GitHub Action enables you to:
 | `resourceName` | ✅ | Exact Enov8 resource name |
 | `version` | ❌ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
-| `metadata` | ❌ | JSON object used only when `resourceName` doesn't exist yet, to create it. Requires `Status` (Enov8 rejects create without one). Supported keys: `Status`, `System`, `Environment`, `Assigned To` (`System`/`Environment`/`Assigned To` are by name — resolved to ECO IDs automatically). `Organisation` is resolved automatically and never needs to be supplied. |
+| `autocreate` | ❌ | `"true"` to create `resourceName` when it doesn't exist (using `metadata`). Defaults to `"false"` — a not-found resource is always an error unless this is set. |
+| `metadata` | ❌ | Required when `autocreate` is `"true"` and `resourceName` doesn't exist yet. Requires `Status` (Enov8 rejects create without one). Supported keys: `Status`, `System`, `Environment`, `Business Unit`, `Type`, `Core`. `System`/`Environment` are by name — resolved to ECO IDs automatically. `Business Unit`, `Type` (default `"Other"`), and `Core` (default `"False"`) are only used if `System` also doesn't exist and needs creating. `Assigned To` and `Organisation` are always resolved automatically and must not be supplied. |
 
 ---
 
@@ -120,7 +121,7 @@ jobs:
 
 # 🆕 Example — Create Environment Instance If Missing
 
-If `resourceName` doesn't exist yet, supply `metadata` (names only — no ECO IDs) and the action will create it:
+If `resourceName` doesn't exist yet, set `autocreate: "true"` and supply `metadata` (names only — no ECO IDs) and the action will create it:
 
 ```yaml
       - name: Enov8 - Deployment Version Update
@@ -133,17 +134,49 @@ If `resourceName` doesn't exist yet, supply `metadata` (names only — no ECO ID
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
           version: "18.0.12"
+          autocreate: "true"
 
           metadata: |
             {
               "Status": "InOperation",
               "System": "GDW",
-              "Environment": "DEV Env",
-              "Assigned To": "Support Team"
+              "Environment": "DEV Env"
             }
 ```
 
-`Organisation` is resolved automatically — do not include it in `metadata`.
+`Assigned To` and `Organisation` are resolved automatically — do not include them in `metadata`.
+
+---
+
+# 🆕 Example — Create Environment Instance AND its System If Missing
+
+If the `System` referenced in `metadata` doesn't exist either, add `Business Unit` (and optionally `Type` / `Core`) and the action creates the System first, then the instance:
+
+```yaml
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+
+          resourceType: "Environment Instance"
+          resourceName: "NewSystem (DEV)"
+          version: "1.0.0"
+          autocreate: "true"
+
+          metadata: |
+            {
+              "Status": "InOperation",
+              "System": "NewSystem",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Application",
+              "Core": "True"
+            }
+```
+
+`Business Unit`, `Type`, and `Core` are ignored if `System` already exists.
 
 ---
 
@@ -237,12 +270,12 @@ version: "18.0.12"
 
 ```yaml
 version: "18.0.12"
+autocreate: "true"
 metadata: |
   {
     "Status": "InOperation",
     "System": "GDW",
-    "Environment": "DEV Env",
-    "Assigned To": "Support Team"
+    "Environment": "DEV Env"
   }
 ```
 
@@ -260,9 +293,11 @@ metadata: |
 
 ## ❌ Create failed / could not resolve metadata name
 
+- Verify `autocreate` is set to `"true"` — without it, a not-found resource is always an error
 - Verify `metadata.Status` is set — Enov8 rejects create without it
-- Verify the `System`, `Environment`, or `Assigned To` name in `metadata` matches exactly (these are looked up by name against Enov8)
-- Only `Status`, `System`, `Environment`, and `Assigned To` are supported keys in `metadata` — do not include `Organisation`, it's resolved automatically
+- Verify the `System` or `Environment` name in `metadata` matches exactly (these are looked up by name against Enov8)
+- If `System` also needs creating, verify `metadata["Business Unit"]` matches an existing Business Unit name
+- Do not include `Assigned To` or `Organisation` in `metadata` — both are resolved automatically
 
 ---
 

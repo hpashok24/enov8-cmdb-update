@@ -30,12 +30,12 @@ jobs:
           version: "18.99"
           # ✅ Required for MicroService
           systemInstance: ""
-          # ✅ Optional — only used to create "GDW (DEV)" if it doesn't already exist
+          # ✅ Optional — creates "GDW (DEV)" if it doesn't already exist
+          autocreate: "true"
           metadata: |
             {
               "Status": "InOperation",
               "System": "GDW",
-              "Environment": "DEV Env",
-              "Assigned To": "Support Team"
+              "Environment": "DEV Env"
             }
 

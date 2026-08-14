@@ -21,11 +21,11 @@ jobs:
           resourceName: "GDW (SIT25)"
 
           version: "18.0.13"
+          autocreate: "true"
 
           metadata: |
             {
               "Status": "InOperation",
               "System": "GDW",
-              "Environment": "SIT Env",
-              "Assigned To": "Environment Team"
+              "Environment": "SIT Env"
             }

@@ -53,31 +53,25 @@ function request(method, urlStr, payload, headers) {
   });
 }
 
-// ✅ Name -> ECO ID lookups for the metadata block (create-only path)
-const METADATA_LOOKUPS = {
-  'System': { endpoint: 'System', nameField: 'Resource Name' },
-  'Environment': { endpoint: 'Environment', nameField: 'Resource Name' },
-  'Assigned To': { endpoint: 'Group', nameField: 'Contact Name' }
-};
-
-async function resolveEcoId(baseUrl, headers, field, name) {
-  const lookup = METADATA_LOOKUPS[field];
-
-  if (!lookup) {
-    throw new Error(`No lookup configured for metadata field: ${field}`);
-  }
-
-  const url = `${baseUrl}/api/${lookup.endpoint}?${encodeURIComponent(lookup.nameField)}=${encodeURIComponent(name)}`;
+// ✅ Name -> ECO ID lookup by endpoint, returns null (not throw) when nothing matches
+async function tryResolveByName(baseUrl, headers, endpoint, nameField, name) {
+  const url = `${baseUrl}/api/${endpoint}?${encodeURIComponent(nameField)}=${encodeURIComponent(name)}`;
   const res = await request('GET', url, undefined, headers);
 
   const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
-  const match = records.find(r => r[lookup.nameField] === name) || records[0];
+  const match = records.find(r => r[nameField] === name) || records[0];
 
-  if (!match || !match['System ID']) {
-    throw new Error(`Could not resolve "${field}" name "${name}" via ${lookup.endpoint} lookup`);
+  return (match && match['System ID']) || null;
+}
+
+async function resolveByName(baseUrl, headers, endpoint, nameField, name) {
+  const id = await tryResolveByName(baseUrl, headers, endpoint, nameField, name);
+
+  if (!id) {
+    throw new Error(`Could not resolve "${name}" via ${endpoint} lookup`);
   }
 
-  return match['System ID'];
+  return id;
 }
 
 // ✅ Organisation is a single fixed record per tenant — no name needed
@@ -92,6 +86,72 @@ async function resolveOrganisationId(baseUrl, headers) {
   }
 
   return org['System ID'];
+}
+
+// ✅ "Assigned To" is always the Group flagged for environment management — never supplied by name
+async function resolveAssignedToId(baseUrl, headers) {
+  const url = `${baseUrl}/api/Group`;
+  const res = await request('GET', url, undefined, headers);
+
+  const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
+  const match = records.find(r => r['Env Management'] === true);
+
+  if (!match || !match['System ID']) {
+    throw new Error('Could not resolve Assigned To — no Group found with "Env Management": true');
+  }
+
+  return match['System ID'];
+}
+
+// ✅ Creates the System if it doesn't already exist (cascade from a System Instance create)
+async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitName, status, assignedToId, organisationId, systemType, systemCore) {
+  const existingId = await tryResolveByName(baseUrl, headers, 'System', 'Resource Name', systemName);
+
+  if (existingId) {
+    return existingId;
+  }
+
+  console.log(`⚠️ System "${systemName}" not found — creating it`);
+
+  if (!businessUnitName) {
+    throw new Error(`metadata["Business Unit"] is required to create System "${systemName}"`);
+  }
+
+  const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', businessUnitName);
+
+  const payload = JSON.stringify({
+    'Resource Name': systemName,
+    'Status': status,
+    'Business Unit': businessUnitId,
+    'Assigned To': assignedToId,
+    'Organisation': organisationId,
+    'Type': systemType || 'Other',
+    'Core': systemCore || 'False'
+  });
+
+  const systemUrl = `${baseUrl}/api/System`;
+
+  console.log(`📡 POST ${systemUrl}`);
+  console.log(`📦 Payload:\n${payload}`);
+
+  const res = await request('POST', systemUrl, payload, {
+    ...headers,
+    'Content-Length': Buffer.byteLength(payload)
+  });
+
+  console.log(`📨 Response:\n${res.body}`);
+
+  const created = res.parsed
+    && Array.isArray(res.parsed.result)
+    && res.parsed.result.find(r => r.success === true);
+
+  if (!created) {
+    throw new Error(`❌ Failed to create System "${systemName}": ${res.body}`);
+  }
+
+  console.log(`✅ Created System "${systemName}" (${created['System ID']})`);
+
+  return created['System ID'];
 }
 
 function writeOutput(res) {
@@ -118,6 +178,9 @@ async function run() {
 
     // ✅ Only used when the resource doesn't exist yet — resolved to ECO IDs and used to create it
     const metadataRaw = getInput('metadata');
+
+    // ✅ Gate for the create fallback — a not-found resource is only ever created when this is 'true'
+    const autocreate = getInput('autocreate') === 'true';
 
     // ✅ Endpoint mappings
     const endpointMap = {
@@ -185,9 +248,13 @@ async function run() {
       return;
     }
 
-    // ✅ Update didn't match an existing resource — fall back to create when metadata is supplied
-    if (!metadataRaw) {
+    // ✅ Update didn't match an existing resource — only create when autocreate is enabled
+    if (!autocreate) {
       throw new Error(`❌ API Error: ${updateRes.body}`);
+    }
+
+    if (!metadataRaw) {
+      throw new Error(`metadata is required to create "${resourceName}" when autocreate is true`);
     }
 
     console.log(`⚠️ No existing "${resourceName}" found — attempting to create it using metadata`);
@@ -206,21 +273,30 @@ async function run() {
       throw new Error(`metadata.Status is required to create "${resourceName}" (Enov8 rejects create without a Status)`);
     }
 
+    const organisationId = await resolveOrganisationId(baseUrl, headers);
+    const assignedToId = await resolveAssignedToId(baseUrl, headers);
+
     const createPayloadObj = {
       'Resource Name': resourceName,
-      'Status': status
+      'Status': status,
+      'Assigned To': assignedToId,
+      'Organisation': organisationId
     };
 
     if (version) {
       createPayloadObj['Version'] = version;
     }
 
-    for (const [field, name] of Object.entries(metadata)) {
-      if (field === 'Status' || !name) continue;
-      createPayloadObj[field] = await resolveEcoId(baseUrl, headers, field, name);
+    if (metadata['Environment']) {
+      createPayloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
     }
 
-    createPayloadObj['Organisation'] = await resolveOrganisationId(baseUrl, headers);
+    if (metadata['System']) {
+      createPayloadObj['System'] = await resolveOrCreateSystem(
+        baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
+        metadata['Type'], metadata['Core']
+      );
+    }
 
     const createPayload = JSON.stringify(createPayloadObj);
 
