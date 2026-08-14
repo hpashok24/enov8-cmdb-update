@@ -18,7 +18,7 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
 
           resourceType: "Environment Instance"
-          resourceName: "NewSystem (SIT)"
+          resourceName: "NewSystem (SIT2)"
 
           version: "1.0.0"
           autocreate: "true"
