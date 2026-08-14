@@ -171,7 +171,7 @@ If the `System` referenced in `metadata` doesn't exist either, add `Business Uni
               "System": "NewSystem",
               "Environment": "DEV Env",
               "Business Unit": "IT",
-              "Type": "Application",
+              "Type": "Cloud",
               "Core": "True"
             }
 ```
