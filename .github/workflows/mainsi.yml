@@ -20,7 +20,7 @@ jobs:
           resourceType: "Environment Instance"
           resourceName: "NewSystem6 (SIT)"
 
-          version: "1.0.27"
+          version: "1.0.29"
           autocreate: true
 
           metadata: |
