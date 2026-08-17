@@ -29,6 +29,6 @@ jobs:
               "System": "NewSystem",
               "Environment": "SIT Env",
               "Business Unit": "IT",
-              "Type": "Application",
+              "Type": "Other",
               "Core": "True"
             }
