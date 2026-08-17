@@ -27,5 +27,8 @@ jobs:
             {
               "Status": "InOperation",
               "System": "NewSystem",
-              "Environment": "SIT Env"
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
+              "Type": "Application",
+              "Core": "True"
             }
