@@ -21,11 +21,10 @@ jobs:
           resourceName: "NewSystem (SIT4)"
 
           version: "1.0.22"
-          autocreate: "true"
+          autocreate: true
 
           metadata: |
             {
-              "Status": "InOperation",
               "System": "NewSystem",
               "Environment": "SIT Env"
             }

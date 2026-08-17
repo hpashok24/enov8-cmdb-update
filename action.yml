@@ -24,12 +24,12 @@ inputs:
     required: false
 
   autocreate:
-    description: 'When "true", create resourceName if it does not already exist (using metadata). When "false" (default), a not-found resourceName is always an error.'
+    description: 'Boolean. When true, create resourceName if it does not already exist (using metadata). When false (default), a not-found resourceName is always an error. Can be written unquoted (true/false) in the workflow YAML.'
     required: false
     default: 'false'
 
   metadata:
-    description: 'Required when autocreate is true and resourceName does not exist yet. Requires "Status" (Enov8 rejects create without one). Supported keys: "Status", "System", "Environment", "Business Unit", "Type", "Core". "System"/"Environment" are by name — resolved to ECO IDs automatically. "Business Unit", "Type" (default "Other"), and "Core" (default "False") are only used if "System" also does not exist and must be created — Type must be a value already configured in your Enov8 tenant (e.g. Other, Cloud, Azure, AWS, GCP, Windows, Linux, Mainframe, Non-Mainframe, Middleware, Container, Interface, MicroService, Legacy, PC Client Server). "Assigned To" and "Organisation" are always resolved automatically (Assigned To = the Group flagged "Env Management"; Organisation = the tenant single Organisation) and must not be supplied. Example: {"Status": "InOperation", "System": "GDW", "Environment": "DEV Env", "Business Unit": "IT", "Type": "Cloud", "Core": "True"}'
+    description: 'Used when autocreate is true and resourceName does not exist yet. Supported keys: "Status" (default "InOperation"), "System", "Environment", "Business Unit" (default "Other"), "Type" (default "Other"), "Core" (default "False"). "System"/"Environment" are by name — resolved to ECO IDs automatically. "Business Unit", "Type", and "Core" are only used if "System" also does not exist and must be created — Type must be a value already configured in your Enov8 tenant (e.g. Other, Cloud, Azure, AWS, GCP, Windows, Linux, Mainframe, Non-Mainframe, Middleware, Container, Interface, MicroService, Legacy, PC Client Server). "Assigned To" and "Organisation" are always resolved automatically (Assigned To = the Group flagged "Env Management"; Organisation = the tenant single Organisation) and must not be supplied. Example (all defaults): {"System": "GDW", "Environment": "DEV Env"}'
     required: false
 
   app_id:

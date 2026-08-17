@@ -113,11 +113,7 @@ async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitN
 
   console.log(`⚠️ System "${systemName}" not found — creating it`);
 
-  if (!businessUnitName) {
-    throw new Error(`metadata["Business Unit"] is required to create System "${systemName}"`);
-  }
-
-  const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', businessUnitName);
+  const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', businessUnitName || 'Other');
 
   const payload = JSON.stringify({
     'Resource Name': systemName,
@@ -180,7 +176,7 @@ async function run() {
     const metadataRaw = getInput('metadata');
 
     // ✅ Gate for the create fallback — a not-found resource is only ever created when this is 'true'
-    const autocreate = getInput('autocreate') === 'true';
+    const autocreate = getInput('autocreate').toLowerCase() === 'true';
 
     // ✅ Endpoint mappings
     const endpointMap = {
@@ -267,11 +263,7 @@ async function run() {
       throw new Error(`Invalid metadata JSON: ${e.message}`);
     }
 
-    const status = metadata['Status'];
-
-    if (!status) {
-      throw new Error(`metadata.Status is required to create "${resourceName}" (Enov8 rejects create without a Status)`);
-    }
+    const status = metadata['Status'] || 'InOperation';
 
     const organisationId = await resolveOrganisationId(baseUrl, headers);
     const assignedToId = await resolveAssignedToId(baseUrl, headers);
