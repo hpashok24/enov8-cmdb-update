@@ -21,7 +21,7 @@ jobs:
           resourceName: "NewSystem6 (SIT)"
 
           version: "1.0.27"
-          autocreate: false
+          autocreate: true
 
           metadata: |
             {
