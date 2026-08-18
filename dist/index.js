@@ -150,6 +150,61 @@ async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitN
   return created['System ID'];
 }
 
+// ✅ Creates the System Instance if it doesn't already exist (cascade from a MicroService create).
+// Returns the instance's name, not its ECO ID — Enov8 resolves SystemInstance by name on MicroService create.
+async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, metadata, status, assignedToId, organisationId) {
+  const existingId = await tryResolveByName(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
+
+  if (existingId) {
+    return instanceName;
+  }
+
+  console.log(`⚠️ System Instance "${instanceName}" not found — creating it`);
+
+  const payloadObj = {
+    'Resource Name': instanceName,
+    'Status': status,
+    'Assigned To': assignedToId,
+    'Organisation': organisationId
+  };
+
+  if (metadata['Environment']) {
+    payloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
+  }
+
+  if (metadata['System']) {
+    payloadObj['System'] = await resolveOrCreateSystem(
+      baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
+      metadata['Type'], metadata['Core']
+    );
+  }
+
+  const payload = JSON.stringify(payloadObj);
+  const instanceUrl = `${baseUrl}/api/SystemInstance`;
+
+  console.log(`📡 POST ${instanceUrl}`);
+  console.log(`📦 Payload:\n${payload}`);
+
+  const res = await request('POST', instanceUrl, payload, {
+    ...headers,
+    'Content-Length': Buffer.byteLength(payload)
+  });
+
+  console.log(`📨 Response:\n${res.body}`);
+
+  const created = res.parsed
+    && Array.isArray(res.parsed.result)
+    && res.parsed.result.some(r => r.success === true);
+
+  if (!created) {
+    throw new Error(`❌ Failed to create System Instance "${instanceName}": ${res.body}`);
+  }
+
+  console.log(`✅ Created System Instance "${instanceName}"`);
+
+  return instanceName;
+}
+
 function writeOutput(res) {
   fs.appendFileSync(
     process.env.GITHUB_OUTPUT,
@@ -268,26 +323,42 @@ async function run() {
     const organisationId = await resolveOrganisationId(baseUrl, headers);
     const assignedToId = await resolveAssignedToId(baseUrl, headers);
 
-    const createPayloadObj = {
-      'Resource Name': resourceName,
-      'Status': status,
-      'Assigned To': assignedToId,
-      'Organisation': organisationId
-    };
+    let createPayloadObj;
+
+    if (resourceType === 'MicroService') {
+      // ✅ MicroService needs no Assigned To/Organisation of its own — just a valid SystemInstance name,
+      // cascade-created (System Instance -> System) via the same metadata used elsewhere.
+      const resolvedInstanceName = await resolveOrCreateSystemInstance(
+        baseUrl, headers, systemInstance, metadata, status, assignedToId, organisationId
+      );
+
+      createPayloadObj = {
+        'MicroService Name': resourceName,
+        'Status': status,
+        'SystemInstance': resolvedInstanceName
+      };
+    } else {
+      createPayloadObj = {
+        'Resource Name': resourceName,
+        'Status': status,
+        'Assigned To': assignedToId,
+        'Organisation': organisationId
+      };
+
+      if (metadata['Environment']) {
+        createPayloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
+      }
+
+      if (metadata['System']) {
+        createPayloadObj['System'] = await resolveOrCreateSystem(
+          baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
+          metadata['Type'], metadata['Core']
+        );
+      }
+    }
 
     if (version) {
       createPayloadObj['Version'] = version;
-    }
-
-    if (metadata['Environment']) {
-      createPayloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
-    }
-
-    if (metadata['System']) {
-      createPayloadObj['System'] = await resolveOrCreateSystem(
-        baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
-        metadata['Type'], metadata['Core']
-      );
     }
 
     const createPayload = JSON.stringify(createPayloadObj);

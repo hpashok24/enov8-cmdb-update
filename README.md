@@ -210,6 +210,38 @@ jobs:
 
 ---
 
+# 🆕 Example — Create MicroService, Cascading Through System Instance and System
+
+If `resourceName` (the MicroService) doesn't exist, set `autocreate: true`. If `systemInstance` also doesn't exist, it's created too — and if the `System` referenced in `metadata` doesn't exist either, that's created first. Same `metadata` shape as the Environment Instance examples above:
+
+```yaml
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+
+          resourceType: "MicroService"
+          resourceName: "Web Portal"
+          systemInstance: "GDW (DEV)"
+          version: "4.1"
+          autocreate: true
+
+          metadata: |
+            {
+              "System": "GDW",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
+            }
+```
+
+If `systemInstance` already exists, `metadata` can be empty (`{}`) — nothing below the MicroService needs creating. `Status` is shared across every level that actually gets created (MicroService, System Instance, System) rather than set per-level.
+
+---
+
 # ▶️ Step 4 — Run Workflow
 
 1. Go to the **Actions** tab  
