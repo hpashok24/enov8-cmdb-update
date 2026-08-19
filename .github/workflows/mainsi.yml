@@ -19,7 +19,7 @@ jobs:
 
           resourceType: "MicroService"
           resourceName: "TestMicroService2"
-          systemInstance: "TestSystemInstance2 (SIT)"
+          systemInstance: "TestSystemInstance3 (SIT)"
           version: "1.0.1"
           autocreate: true
 
