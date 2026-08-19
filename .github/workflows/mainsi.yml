@@ -17,14 +17,17 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
 
-          resourceType: "Environment Instance"
-          resourceName: "NewSystem6 (SIT)"
-
-          version: "1.0.29"
+          resourceType: "MicroService"
+          resourceName: "TestMicroService1"
+          systemInstance: "TestSystemInstance1 (SIT)"
+          version: "1.0.0"
           autocreate: true
 
           metadata: |
             {
-              "System": "NewSystem4",
-              "Environment": "SIT Env"
+              "System": "TestSystem1",
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
             }
