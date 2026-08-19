@@ -37,7 +37,7 @@ This GitHub Action enables you to:
 | `version` | ❌ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
 | `autocreate` | ❌ | Boolean — `true` to create `resourceName` when it doesn't exist (using `metadata`). Defaults to `false` — a not-found resource is always an error unless this is set. Can be written unquoted (`true`/`false`) in YAML. |
-| `metadata` | ❌ | Used when `autocreate` is `true` and `resourceName` doesn't exist yet. Supported keys, all optional with defaults: `Status` (default `"InOperation"`), `System`, `Environment`, `Business Unit` (default `"Other"`), `Type` (default `"Other"`), `Core` (default `"False"`). `System`/`Environment` are by name — resolved automatically. `Business Unit`/`Type`/`Core` are only used if `System` also doesn't exist and needs creating. `Assigned To` and `Organisation` are always resolved automatically and must not be supplied. |
+| `metadata` | ❌ | Used when `autocreate` is `true` and `resourceName` doesn't exist yet. Shape depends on `resourceType` — see [Configuring `metadata`](#-configuring-metadata) below. `Assigned To` and `Organisation` are always resolved automatically in every case and must not be supplied. |
 
 ---
 
@@ -45,24 +45,22 @@ This GitHub Action enables you to:
 
 `metadata` is a JSON object. It is **only ever read when `autocreate: true` and `resourceName` doesn't already exist** — if the resource is found, `metadata` is never parsed, and none of this applies.
 
-## Key reference
+Its shape is different for `System Component` than for everything else, because System Component has no System/Environment dependency at all.
+
+## `Environment Instance` / `System Interface` / `MicroService`
 
 | Key | Default if omitted | Only matters when... | Notes |
 |---|---|---|---|
 | `Status` | `"InOperation"` | Anything is being created | Shared across **every** level created in one run (e.g. if a MicroService, its System Instance, and its System are all created in the same run, all three get this one Status — there's no per-level override). |
-| `Environment` | — *(no default — required if the resource being created needs one)* | Creating an `Environment Instance` / `System Component` / `System Interface`, or cascading into a `System Instance` for a `MicroService` | Looked up by name. **Never auto-created** — if the name doesn't match an existing Environment, the run fails. Create the Environment in Enov8 first. |
+| `Environment` | — *(no default — required if the resource being created needs one)* | Creating the resource itself, or cascading into a `System Instance` for a `MicroService` | Looked up by name. **Never auto-created** — if the name doesn't match an existing Environment, the run fails. Create the Environment in Enov8 first. |
 | `System` | — *(omit if the System isn't relevant, e.g. resource already exists)* | Same as `Environment` above | Looked up by name. **Is** auto-created if missing (see cascade below). |
 | `Business Unit` | `"Other"` | The `System` above doesn't exist and is being created | Ignored entirely if `System` already exists. |
-| `Type` | `"Other"` | Same as `Business Unit` | Must be a value already configured in your Enov8 tenant's System Type picklist — e.g. `Other`, `Cloud`, `Azure`, `AWS`, `GCP`, `Windows`, `Linux`, `Mainframe`, `Non-Mainframe`, `Middleware`, `Container`, `Interface`, `MicroService`, `Legacy`, `PC Client Server`. An unrecognized value fails with an Enov8 `[OBJ_ERROR]`. |
+| `Type` | `"Other"` | Same as `Business Unit` | The System's Type — must be a value already configured in your Enov8 tenant's **System** Type picklist — e.g. `Other`, `Cloud`, `Azure`, `AWS`, `GCP`, `Windows`, `Linux`, `Mainframe`, `Non-Mainframe`, `Middleware`, `Container`, `Interface`, `MicroService`, `Legacy`, `PC Client Server`. An unrecognized value fails with an Enov8 `[OBJ_ERROR]`. |
 | `Core` | `"False"` | Same as `Business Unit` | |
 
-**Never include** `Assigned To` or `Organisation` — the action never reads them from `metadata` (they're always resolved automatically), so adding them does nothing except clutter the JSON.
+### The cascade, level by level
 
-## The cascade, level by level
-
-How many levels `metadata` can trigger depends on `resourceType`:
-
-**`Environment Instance` / `System Component` / `System Interface`**
+**`Environment Instance` / `System Interface`**
 1. The resource itself — needs `Environment` and `System` (both by name).
 2. *(only if `System` doesn't exist)* the System — needs `Business Unit`, `Type`, `Core`.
 
@@ -71,9 +69,9 @@ How many levels `metadata` can trigger depends on `resourceType`:
 2. *(only if `systemInstance` doesn't exist)* the System Instance — needs `Environment` and `System` from `metadata`, same as above.
 3. *(only if that `System` doesn't exist)* the System — needs `Business Unit`, `Type`, `Core`, same as above.
 
-At every level, the action checks "does this already exist?" **before** creating anything — so you never get duplicate creates, and you only need to supply whichever keys correspond to what's actually missing. Everything else in `metadata` is simply ignored if it turns out not to be needed.
+At every level, the action checks "does this already exist?" **before** creating anything — so you never get duplicate creates, and you only need to supply whichever keys correspond to what's actually missing.
 
-## Quick decision guide
+### Quick decision guide
 
 | Your situation | What to put in `metadata` |
 |---|---|
@@ -82,6 +80,18 @@ At every level, the action checks "does this already exist?" **before** creating
 | Doesn't exist, `Environment` also doesn't exist | Not possible via this action — create the Environment in Enov8 first, then re-run. |
 | Doesn't exist, `System` also doesn't exist | `{"System": "...", "Environment": "..."}` — add `Business Unit`/`Type`/`Core` only if the defaults (`Other`/`Other`/`False`) aren't right for this System. |
 | Creating a MicroService whose System Instance and System are also both missing | `{"System": "...", "Environment": "...", "Business Unit": "...", "Type": "...", "Core": "..."}` — same shape, one level deeper via `systemInstance`. |
+
+## `System Component`
+
+No System, Environment, or cascade involved at all — a System Component stands alone.
+
+| Key | Default if omitted | Notes |
+|---|---|---|
+| `Status` | `"InOperation"` | |
+| `Type` | **Required — no default** | The component's own Type — a completely separate, tenant-specific **Component** Type picklist (different from System's Type above). There's no universally-safe default, so this must be supplied explicitly. Check existing components in your tenant for valid values (e.g. `Server`, `Database`, `Module`, `Integration`). |
+| `Monitored` | `"False"` | Boolean-as-string. |
+
+Example: `{"Type": "Server"}`
 
 ---
 
@@ -219,6 +229,34 @@ If the `System` referenced in `metadata` doesn't exist either, the action create
 ```
 
 `Business Unit`, `Type`, and `Core` are ignored if `System` already exists.
+
+---
+
+# 🆕 Example — Create System Component If Missing
+
+No System/Environment involved — just its own Type (required, tenant-specific Component Type picklist) and optional Monitored flag:
+
+```yaml
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.0.0
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+
+          resourceType: "System Component"
+          resourceName: "AppServer_PROD_NewApp"
+          version: "1.0"
+          autocreate: true
+
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": "True"
+            }
+```
+
+Unlike every other resource type, `Type` here has **no default** — it must be supplied and must match a value already in your tenant's Component Type picklist.
 
 ---
 
@@ -370,6 +408,13 @@ metadata: |
 - Verify the `System` or `Environment` name in `metadata` matches exactly (these are looked up by name against Enov8)
 - If `System` also needs creating and you overrode `Business Unit`, verify it matches an existing Business Unit name
 - Do not include `Assigned To` or `Organisation` in `metadata` — both are resolved automatically
+
+---
+
+## ❌ System Component create failed — "metadata.Type is required"
+
+- `System Component` has no default `Type` — you must supply one in `metadata` (e.g. `{"Type": "Server"}`)
+- The value must match an existing Component Type in your tenant — this is a different picklist from System's `Type`
 
 ---
 

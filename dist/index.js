@@ -337,6 +337,23 @@ async function run() {
         'Status': status,
         'SystemInstance': resolvedInstanceName
       };
+    } else if (resourceType === 'System Component') {
+      // ✅ No System/Environment dependency at all — just its own Type (a separate, tenant-specific
+      // ComponentType picklist — no safe default, so it's required) and Monitored flag.
+      const componentType = metadata['Type'];
+
+      if (!componentType) {
+        throw new Error(`metadata.Type is required to create "${resourceName}" (must be a value already configured in your Enov8 tenant's Component Type picklist, e.g. Server, Database, Module, Integration)`);
+      }
+
+      createPayloadObj = {
+        'Resource Name': resourceName,
+        'Status': status,
+        'Type': componentType,
+        'Monitored': metadata['Monitored'] || 'False',
+        'Assigned To': assignedToId,
+        'Organisation': organisationId
+      };
     } else {
       createPayloadObj = {
         'Resource Name': resourceName,
