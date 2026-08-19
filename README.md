@@ -1,86 +1,53 @@
-# Enov8 Deployment Version Update
+# Enov8 - Deployment Version Update GitHub Action
 
-A GitHub Action for updating Enov8 CMDB resource versions from a CI/CD pipeline, and provisioning the resource if it doesn't exist yet. It talks to the Enov8 REST API directly; no external dependencies.
+## Overview
 
-## What it does
+This action updates the deployed version for an Environment Instance, System Component, System Interface, or MicroService in Enov8 directly from GitHub Actions. If the target resource does not yet exist, the action can create it, resolving any related System, Environment, or System Instance records by name.
 
-On every run, the action tries to update `resourceName` first. If that resource already exists, this is all you need — it updates the version and exits.
+## Key Features
 
-If the resource doesn't exist and `autocreate` is turned on, the action creates it instead, resolving anything it references (a System, an Environment, a parent System Instance) by name rather than requiring you to know Enov8's internal IDs. For resource types with dependencies, it will create those too if they're also missing — e.g. creating a MicroService can cascade into creating its System Instance, which can cascade into creating its System.
+- Updates deployed version information for Environment Instances, System Components, System Interfaces, and MicroServices
+- Creates a resource automatically when it does not already exist, resolving referenced records by name instead of requiring internal Enov8 IDs
+- Cascades creation through dependent records where needed — a MicroService can create its System Instance, which can create its System
+- Supports four resource types: Environment Instance, System Component, System Interface, and MicroService
 
-## Supported resource types
+## Required Inputs
 
-| Type | Update | Create (`autocreate: true`) |
-|---|---|---|
-| `Environment Instance` | Yes | Yes — resolves/creates its `System`, resolves its `Environment` |
-| `System Component` | Yes | Yes — standalone, no System/Environment dependency |
-| `MicroService` | Yes | Yes — resolves/creates its System Instance (and that instance's System) |
-| `System Interface` | Yes | Not verified against the live API yet — avoid `autocreate` for this type until it's been checked |
+| Input | Purpose |
+|---|---|
+| `enov8_url` | Base Enov8 URL, excluding `/api` |
+| `app_id` | Enov8 App ID credential |
+| `app_key` | Enov8 App Key credential |
+| `resourceType` | One of: `Environment Instance`, `System Component`, `System Interface`, `MicroService` |
+| `resourceName` | Exact resource name, matching Enov8 exactly |
+| `version` | The version value to set |
 
-## Inputs
+## Optional Inputs
 
-| Name | Required | Description |
-|---|---|---|
-| `enov8_url` | yes | Base Enov8 URL, without `/api` (e.g. `https://yourcompany.enov8.cloud/ecosystem`) |
-| `app_id` | yes | Enov8 App ID |
-| `app_key` | yes | Enov8 App Key |
-| `resourceType` | yes | One of the types listed above |
-| `resourceName` | yes | Exact resource name — must match Enov8 exactly, including case and spacing |
-| `version` | yes | Version value to set |
-| `systemInstance` | only for `MicroService` | Name of the parent System Instance |
-| `autocreate` | no, default `false` | Create `resourceName` if it doesn't exist, using `metadata`. Without this, a not-found resource is always a failed run. |
-| `metadata` | only when `autocreate` is used and the resource is missing | JSON object — see below |
+| Input | Purpose |
+|---|---|
+| `systemInstance` | Name of the parent System Instance. Required when `resourceType` is `MicroService`. |
+| `autocreate` | When `true`, creates `resourceName` if it does not already exist, using `metadata`. Defaults to `false`, in which case a not-found resource always fails the run. |
+| `metadata` | JSON object describing how to create the resource. Only read when `autocreate` is `true` and the resource is missing. See [Configuring metadata](#configuring-metadata). |
 
-## Configuring `metadata`
-
-`metadata` is only read when `autocreate: true` and `resourceName` doesn't already exist. If the resource is found, it's never parsed.
-
-Its shape depends on `resourceType` — `System Component` has no System/Environment dependency, so it's documented separately below.
-
-### `Environment Instance` / `System Interface` / `MicroService`
-
-| Key | Default | Notes |
-|---|---|---|
-| `Status` | `"InOperation"` | Applied to every level created in one run — if a run creates a MicroService, its System Instance, and its System all in one go, all three get this same value. There's no per-level override. |
-| `Environment` | — (required if the created resource needs one) | Resolved by name. Never auto-created — if the name doesn't match an existing Environment, the run fails. |
-| `System` | — (omit if not relevant) | Resolved by name. Auto-created if missing. |
-| `Business Unit` | `"Other"` | Only read if `System` needs creating. |
-| `Type` | `"Other"` | The System's Type. Only read if `System` needs creating. Must match a value already configured in your tenant's System Type picklist — check what's valid before relying on a non-default value; common ones include `Cloud`, `Azure`, `AWS`, `GCP`, `Windows`, `Linux`, `Mainframe`, `Container`. |
-| `Core` | `"False"` | Only read if `System` needs creating. |
-
-Dependency chain, deepest first:
-
-- `Environment Instance` / `System Interface`: the resource itself needs `Environment` + `System`; `System`, if missing, needs `Business Unit`/`Type`/`Core`.
-- `MicroService`: the MicroService needs `systemInstance` to resolve; that System Instance, if missing, needs `Environment` + `System` from `metadata`; that System, if missing, needs `Business Unit`/`Type`/`Core`.
-
-Each level is checked for existence before anything is created, so you only need to supply the keys for whatever's actually missing — everything else in `metadata` is ignored.
-
-Never include `Assigned To` or `Organisation` — both are always resolved automatically (`Assigned To` from the Enov8 Group flagged for environment management, `Organisation` from the tenant's single Organisation record) and are simply not read from `metadata`.
-
-### `System Component`
-
-| Key | Default | Notes |
-|---|---|---|
-| `Status` | `"InOperation"` | |
-| `Type` | required, no default | A separate, tenant-specific Component Type picklist — different from System's `Type` above. There's no safe universal default, so this must be supplied. Check existing components in your tenant for valid values (e.g. `Server`, `Database`, `Module`, `Integration`). |
-| `Monitored` | `"False"` | |
-
-## Setup
+## Setup Instructions
 
 Add three repository secrets under **Settings → Secrets and variables → Actions**:
 
-| Secret | Example |
-|---|---|
-| `ENOV8_BASE_URL` | `https://yourcompany.enov8.cloud/ecosystem` |
-| `ENOV8_APP_ID` | your app ID |
-| `ENOV8_APP_KEY` | your app key |
+- `ENOV8_BASE_URL`
+- `ENOV8_APP_ID`
+- `ENOV8_APP_KEY`
 
-If you're using GitHub Environments, add `environment: dev` (or whichever environment) to the job — otherwise GitHub may fall back to repository-level secrets instead of environment-scoped ones.
+If the repository uses GitHub Environments, add `environment: <name>` to the job so the correct environment-scoped secrets are used, rather than falling back to repository-level secrets.
 
-There's no tagged release yet, so reference `@main` for now:
+## Usage Examples
+
+There is no tagged release yet, so workflows should reference `@main`.
+
+### Update an existing resource
 
 ```yaml
-name: Update Enov8 Environment Instance
+name: Enov8 CMDB Update
 
 on:
   workflow_dispatch:
@@ -102,96 +69,134 @@ jobs:
           version: "18.0.12"
 ```
 
-Once `resourceName` exists, that's the entire workflow. What follows covers the create path.
-
-## Examples
-
-### Create the resource if it's missing
+### Create the resource if it does not exist
 
 ```yaml
-resourceType: "Environment Instance"
-resourceName: "GDW (DEV)"
-version: "18.0.12"
-autocreate: true
-metadata: |
-  {
-    "System": "GDW",
-    "Environment": "DEV Env"
-  }
+      - name: Enov8 - Deployment Version Update
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEV)"
+          version: "18.0.12"
+          autocreate: true
+          metadata: |
+            {
+              "System": "GDW",
+              "Environment": "DEV Env"
+            }
 ```
 
-### Create it and its System, if the System is also missing
+### Create the resource and its System, if the System also does not exist
 
 ```yaml
-resourceType: "Environment Instance"
-resourceName: "NewSystem (DEV)"
-version: "1.0.0"
-autocreate: true
-metadata: |
-  {
-    "System": "NewSystem",
-    "Environment": "DEV Env",
-    "Business Unit": "IT",
-    "Type": "Cloud",
-    "Core": "True"
-  }
+      - name: Enov8 - Deployment Version Update
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "NewSystem (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "NewSystem",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
+            }
 ```
 
-`Business Unit`/`Type`/`Core` are ignored if `System` already exists — no harm in leaving them in.
+`Business Unit`, `Type`, and `Core` are only used if `System` needs to be created, and are ignored otherwise.
 
 ### MicroService, cascading through System Instance and System
 
 ```yaml
-resourceType: "MicroService"
-resourceName: "Web Portal"
-systemInstance: "GDW (DEV)"
-version: "4.1"
-autocreate: true
-metadata: |
-  {
-    "System": "GDW",
-    "Environment": "DEV Env",
-    "Business Unit": "IT",
-    "Type": "Cloud",
-    "Core": "True"
-  }
+      - name: Enov8 - Deployment Version Update
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "Web Portal"
+          systemInstance: "GDW (DEV)"
+          version: "4.1"
+          autocreate: true
+          metadata: |
+            {
+              "System": "GDW",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
+            }
 ```
 
-If `systemInstance` already exists, `metadata` can just be `{}` — nothing below the MicroService needs creating.
+If `systemInstance` already exists, `metadata` can be `{}` — nothing below the MicroService needs creating.
 
 ### System Component
 
 ```yaml
-resourceType: "System Component"
-resourceName: "AppServer_PROD_NewApp"
-version: "1.0"
-autocreate: true
-metadata: |
-  {
-    "Type": "Server",
-    "Monitored": "True"
-  }
+      - name: Enov8 - Deployment Version Update
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "AppServer_PROD_NewApp"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": "True"
+            }
 ```
 
-Unlike everything else, `Type` here has no default and must be supplied.
+System Component has no System or Environment dependency. Unlike other resource types, `Type` has no default here and must be supplied.
 
-## Notes
+## Configuring `metadata`
 
-- `enov8_url` should be the base URL without `/api` — e.g. `https://yourcompany.enov8.cloud/ecosystem`, not `.../ecosystem/api`.
-- `resourceName` has to match exactly, including case and spacing (`GDW (DEV)`, not `gdw dev`).
-- The action writes the raw Enov8 API response to the `result` output, so a later step can read it via `${{ steps.<step-id>.outputs.result }}`.
+`metadata` is only read when `autocreate` is `true` and `resourceName` does not already exist. Its shape depends on `resourceType`.
 
-## Troubleshooting
+### `Environment Instance`, `System Interface`, `MicroService`
 
-**Run succeeds but "no update applied"** — the resource was found but the value you sent matches what's already there, or the field name is wrong. Not an error.
+| Key | Default | Notes |
+|---|---|---|
+| `Status` | `InOperation` | Applied to every record created in one run. |
+| `Environment` | — (required if needed) | Resolved by name. Not created automatically — the named Environment must already exist. |
+| `System` | — (omit if not needed) | Resolved by name. Created automatically if it does not exist. |
+| `Business Unit` | `Other` | Used only if `System` is being created. |
+| `Type` | `Other` | The System's Type. Used only if `System` is being created. Must match a value already configured in the tenant's System Type picklist. |
+| `Core` | `False` | Used only if `System` is being created. |
 
-**Create fails / can't resolve a name in `metadata`** — confirm `autocreate: true` is actually set (without it, a missing resource is always a hard failure, `metadata` or not), and that `System`/`Environment` names match Enov8 exactly.
+For `MicroService`, the same rules apply one level down: `systemInstance` is resolved first, and if it does not exist, it is created using `Environment`/`System`/`Business Unit`/`Type`/`Core` from `metadata`.
 
-**System Component create fails with "metadata.Type is required"** — `Type` has no default for this resource type; supply one, and make sure it's a valid Component Type in your tenant (different picklist from System's `Type`).
+`Assigned To` and `Organisation` are always resolved automatically and should not be included in `metadata`.
 
-**MicroService update fails** — `systemInstance` is required for this resource type and wasn't provided.
+### `System Component`
 
-**Invalid resourceType** — must be exactly one of `Environment Instance`, `System Component`, `System Interface`, `MicroService`.
+| Key | Default | Notes |
+|---|---|---|
+| `Status` | `InOperation` | |
+| `Type` | Required, no default | A tenant-specific Component Type picklist, separate from System's Type. Check existing components for valid values (for example `Server`, `Database`, `Module`, `Integration`). |
+| `Monitored` | `False` | |
+
+## Important Considerations
+
+- Resource names must match Enov8 records exactly, including case and spacing.
+- `enov8_url` should follow the format `https://<instance>/ecosystem`, excluding `/api`.
+- When updating or creating a MicroService, `systemInstance` must be specified.
+- `Type` and `Status` values are validated against picklists configured per Enov8 tenant. An unrecognized value is rejected by the Enov8 API.
+- `System Interface` autocreate has not been verified against the live API.
+- The action writes the Enov8 API response to the `result` output, available to later steps as `${{ steps.<step-id>.outputs.result }}`.
 
 ## License
 
