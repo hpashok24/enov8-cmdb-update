@@ -59,7 +59,7 @@ jobs:
 
     steps:
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -73,7 +73,7 @@ jobs:
 
 ```yaml
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -93,7 +93,7 @@ jobs:
 
 ```yaml
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -118,7 +118,7 @@ jobs:
 
 ```yaml
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -144,7 +144,7 @@ If `systemInstance` already exists, `metadata` can be `{}` — nothing below the
 
 ```yaml
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
