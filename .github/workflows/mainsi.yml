@@ -16,9 +16,12 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
-          resourceName: "Notification Service"
-          systemInstance: "MIS (SIT)"
-          version: "1.2"
+          resourceName: "Reporting Service"
+          systemInstance: "Vivid234 (DEV)"
+          version: "1.0.0"
           autocreate: true
-          metadata: "{}"
-          
+          metadata: |
+            {
+              "System": "Vivid234",
+              "Environment": "DEV Env"
+            }
