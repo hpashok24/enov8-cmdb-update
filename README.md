@@ -34,7 +34,7 @@ This GitHub Action enables you to:
 | `app_key` | ✅ | Enov8 App Key |
 | `resourceType` | ✅ | Resource type |
 | `resourceName` | ✅ | Exact Enov8 resource name |
-| `version` | ❌ | Version value to update |
+| `version` | ✅ | Version value to update |
 | `systemInstance` | ❌ | Required only for `MicroService` updates |
 | `autocreate` | ❌ | Boolean — `true` to create `resourceName` when it doesn't exist (using `metadata`). Defaults to `false` — a not-found resource is always an error unless this is set. Can be written unquoted (`true`/`false`) in YAML. |
 | `metadata` | ❌ | Used when `autocreate` is `true` and `resourceName` doesn't exist yet. Shape depends on `resourceType` — see [Configuring `metadata`](#-configuring-metadata) below. `Assigned To` and `Organisation` are always resolved automatically in every case and must not be supplied. |

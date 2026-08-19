@@ -219,7 +219,7 @@ async function run() {
     const resourceName = getInput('resourceName', true);
     const resourceType = getInput('resourceType', true);
 
-    const version = getInput('version');
+    const version = getInput('version', true);
 
     const appId = getInput('app_id', true);
     const appKey = getInput('app_key', true);

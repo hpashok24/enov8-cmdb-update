@@ -20,8 +20,8 @@ inputs:
     required: false
 
   version:
-    description: 'Optional version value to update'
-    required: false
+    description: 'Version value to update'
+    required: true
 
   autocreate:
     description: 'Boolean. When true, create resourceName if it does not already exist (using metadata). When false (default), a not-found resourceName is always an error. Can be written unquoted (true/false) in the workflow YAML.'
