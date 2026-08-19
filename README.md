@@ -1,6 +1,6 @@
 # Enov8 Deployment Version Update
 
-A GitHub Action for updating Enov8 CMDB resources from a CI/CD pipeline — bump a version, flip a status field indirectly through creation, or provision a resource that doesn't exist yet. It talks to the Enov8 REST API directly; no external dependencies.
+A GitHub Action for updating Enov8 CMDB resource versions from a CI/CD pipeline, and provisioning the resource if it doesn't exist yet. It talks to the Enov8 REST API directly; no external dependencies.
 
 ## What it does
 
@@ -195,4 +195,4 @@ Unlike everything else, `Type` here has no default and must be supplied.
 
 ## License
 
-No license file is included in this repository yet.
+[MIT](LICENSE)
