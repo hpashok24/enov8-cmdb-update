@@ -41,6 +41,50 @@ This GitHub Action enables you to:
 
 ---
 
+# 🔧 Configuring `metadata`
+
+`metadata` is a JSON object. It is **only ever read when `autocreate: true` and `resourceName` doesn't already exist** — if the resource is found, `metadata` is never parsed, and none of this applies.
+
+## Key reference
+
+| Key | Default if omitted | Only matters when... | Notes |
+|---|---|---|---|
+| `Status` | `"InOperation"` | Anything is being created | Shared across **every** level created in one run (e.g. if a MicroService, its System Instance, and its System are all created in the same run, all three get this one Status — there's no per-level override). |
+| `Environment` | — *(no default — required if the resource being created needs one)* | Creating an `Environment Instance` / `System Component` / `System Interface`, or cascading into a `System Instance` for a `MicroService` | Looked up by name. **Never auto-created** — if the name doesn't match an existing Environment, the run fails. Create the Environment in Enov8 first. |
+| `System` | — *(omit if the System isn't relevant, e.g. resource already exists)* | Same as `Environment` above | Looked up by name. **Is** auto-created if missing (see cascade below). |
+| `Business Unit` | `"Other"` | The `System` above doesn't exist and is being created | Ignored entirely if `System` already exists. |
+| `Type` | `"Other"` | Same as `Business Unit` | Must be a value already configured in your Enov8 tenant's System Type picklist — e.g. `Other`, `Cloud`, `Azure`, `AWS`, `GCP`, `Windows`, `Linux`, `Mainframe`, `Non-Mainframe`, `Middleware`, `Container`, `Interface`, `MicroService`, `Legacy`, `PC Client Server`. An unrecognized value fails with an Enov8 `[OBJ_ERROR]`. |
+| `Core` | `"False"` | Same as `Business Unit` | |
+
+**Never include** `Assigned To` or `Organisation` — the action never reads them from `metadata` (they're always resolved automatically), so adding them does nothing except clutter the JSON.
+
+## The cascade, level by level
+
+How many levels `metadata` can trigger depends on `resourceType`:
+
+**`Environment Instance` / `System Component` / `System Interface`**
+1. The resource itself — needs `Environment` and `System` (both by name).
+2. *(only if `System` doesn't exist)* the System — needs `Business Unit`, `Type`, `Core`.
+
+**`MicroService`**
+1. The MicroService itself — just needs the `systemInstance` input (a name) to already exist, or be created below.
+2. *(only if `systemInstance` doesn't exist)* the System Instance — needs `Environment` and `System` from `metadata`, same as above.
+3. *(only if that `System` doesn't exist)* the System — needs `Business Unit`, `Type`, `Core`, same as above.
+
+At every level, the action checks "does this already exist?" **before** creating anything — so you never get duplicate creates, and you only need to supply whichever keys correspond to what's actually missing. Everything else in `metadata` is simply ignored if it turns out not to be needed.
+
+## Quick decision guide
+
+| Your situation | What to put in `metadata` |
+|---|---|
+| `resourceName` already exists | Nothing — it's never read. Omit `metadata` entirely, or leave `autocreate` off. |
+| Doesn't exist, but its `System`/`Environment` (or `systemInstance`) already do | `{}` — every key defaults. |
+| Doesn't exist, `Environment` also doesn't exist | Not possible via this action — create the Environment in Enov8 first, then re-run. |
+| Doesn't exist, `System` also doesn't exist | `{"System": "...", "Environment": "..."}` — add `Business Unit`/`Type`/`Core` only if the defaults (`Other`/`Other`/`False`) aren't right for this System. |
+| Creating a MicroService whose System Instance and System are also both missing | `{"System": "...", "Environment": "...", "Business Unit": "...", "Type": "...", "Core": "..."}` — same shape, one level deeper via `systemInstance`. |
+
+---
+
 # ⚙️ Setup Guide
 
 ## Step 1 — Add GitHub Secrets
