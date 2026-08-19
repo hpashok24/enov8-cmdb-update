@@ -17,14 +17,13 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
 
-          resourceType: "MicroService"
-          resourceName: "TestMicroService2"
-          systemInstance: "TestSystemInstance3 (SIT)"
-          version: "1.0.1"
+          resourceType: "System Component"
+          resourceName: "TestComponent1"
+          version: "1.0"
           autocreate: true
 
           metadata: |
             {
-              "System": "TestSystem2",
-              "Environment": "SIT Env"
+              "Type": "Server",
+              "Monitored": "True"
             }
