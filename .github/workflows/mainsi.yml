@@ -6,7 +6,6 @@ on:
 jobs:
   update-cmdb:
     runs-on: ubuntu-latest
-
     environment: dev
 
     steps:
@@ -16,14 +15,12 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-
-          resourceType: "System Component"
-          resourceName: "TestComponent1"
-          version: "1.0"
+          resourceType: "Environment Instance"
+          resourceName: "Icon234 (DEV)"
+          version: "1.0.0"
           autocreate: true
-
           metadata: |
             {
-              "Type": "Server",
-              "Monitored": "True"
+              "System": "Icon234",
+              "Environment": "DEV Env"
             }
