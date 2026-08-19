@@ -104,6 +104,32 @@ jobs:
           version: "18.0.12"
 ```
 
+### 🔄 Update an existing MicroService
+
+```yaml
+name: Enov8 MicroService Update
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-microservice:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Enov8 - MicroService Update
+        uses: enov8-Ltd/enov8-update-deployment-version@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "Web Portal"
+          systemInstance: "GDW (DEV)"
+          version: "4.1"
+```
+
 ### 🆕 Create the resource if it does not exist
 
 ```yaml
@@ -310,6 +336,10 @@ systemInstance: "GDW (DEV)"
 - DevOps CMDB integration
 - MicroService deployment tracking
 - Auto-provisioning environment instances on first deploy
+
+## 🆘 Support
+
+For assistance, contact support@enov8.com.
 
 ## 📄 License
 
