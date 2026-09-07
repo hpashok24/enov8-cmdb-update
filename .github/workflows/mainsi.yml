@@ -17,7 +17,7 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
           resourceName: "Icon3 (DEV)"
-          version: "1.0.0"
+          version: "1.1.0"
           autocreate: true
           metadata: |
             {
