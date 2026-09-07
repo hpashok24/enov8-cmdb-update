@@ -17,12 +17,12 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
           resourceName: "Reporting Service"
-          systemInstance: "Vivid1 (DEV)"
-          version: "1.0.2"
+          systemInstance: "Vivid (DEV)"
+          version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "Vivid1",
+              "System": "Vivid",
               "Environment": "DEV Env",
               "Business Unit": "Products",
               "Type": "Cloud",
