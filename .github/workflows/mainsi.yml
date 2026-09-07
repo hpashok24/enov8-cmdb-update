@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-cmdb:
+  update-microservice:
     runs-on: ubuntu-latest
     environment: dev
 
@@ -15,15 +15,16 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "Icon3 (DEV)"
-          version: "1.1.0"
+          resourceType: "MicroService"
+          resourceName: "Reporting Service"
+          systemInstance: "Vivid1 (DEV)"
+          version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "Icon3",
+              "System": "Vivid1",
               "Environment": "DEV Env",
-              "Business Unit": "Finance",
+              "Business Unit": "Products",
               "Type": "Cloud",
               "Core": "True"
             }
