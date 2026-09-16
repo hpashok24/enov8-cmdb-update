@@ -10,19 +10,19 @@ jobs:
 
     steps:
       - name: Enov8 - Deployment Version Update
-        uses: hpashok24/enov8-cmdb-update@main
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
-          resourceName: "Reporting Service"
-          systemInstance: "Vivid (DEV)"
+          resourceName: "Reporting Service2"
+          systemInstance: "Vivid2 (DEV)"
           version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "Vivid",
+              "System": "Vivid2",
               "Environment": "DEV Env",
               "Business Unit": "Products",
               "Type": "Cloud",
