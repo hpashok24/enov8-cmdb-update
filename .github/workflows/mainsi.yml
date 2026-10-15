@@ -16,15 +16,16 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
-          resourceName: "Reporting Service"
-          systemInstance: "Vivid (DEV)"
+          resourceName: "Payments Service"
+          systemInstance: "PayHub (DEV)"
           version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "Vivid",
+              "System": "PayHub",
               "Environment": "DEV Env",
-              "Business Unit": "Products",
+              "Business Unit": "Finance",
               "Type": "Cloud",
-              "Core": "True"
+              "Core": "True",
+              "Resource ID": "APM-10045"
             }
