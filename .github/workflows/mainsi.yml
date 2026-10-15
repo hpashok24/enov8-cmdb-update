@@ -1,4 +1,4 @@
-name: Enov8 CMDB Update
+name: Test Resource ID
 
 on:
   workflow_dispatch:
@@ -9,8 +9,11 @@ jobs:
     environment: dev
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Enov8 - Deployment Version Update
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: ./
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
