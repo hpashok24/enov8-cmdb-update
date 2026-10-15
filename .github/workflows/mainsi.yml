@@ -1,34 +1,432 @@
-name: Test Resource ID
+name: E2E Test Suite
 
 on:
   workflow_dispatch:
 
 jobs:
-  update-microservice:
+  e2e-tests:
     runs-on: ubuntu-latest
     environment: dev
 
+    env:
+      RUN: ${{ github.run_id }}
+
     steps:
+      # Run the action code from the selected branch (not a published tag)
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Enov8 - Deployment Version Update
+      # ======================================================================
+      # REGRESSION — existing behaviour (unchanged test cases)
+      # ======================================================================
+
+      # ---------- System Instance ----------
+
+      - name: "TC-1.3: Create System Instance with System cascade (expect success)"
+        id: tc1_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
+
+      - name: "TC-1.1: Update the System Instance just created (expect success)"
+        id: tc1_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-1.2: Create a second instance on the same (now-existing) System (expect success)"
+        id: tc1_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "DEV Env"
+            }
+
+      # ---------- MicroService ----------
+
+      - name: "TC-2.3: Create MicroService with full cascade (expect success)"
+        id: tc2_3
+        continue-on-error: true
         uses: ./
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
-          resourceName: "Payments Service"
-          systemInstance: "PayHub (DEV)"
+          resourceName: "E2E-Micro-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
           version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "PayHub",
-              "Environment": "DEV Env",
-              "Business Unit": "Finance",
+              "System": "E2E-MicroSys-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
+            }
+
+      - name: "TC-2.1: Update the MicroService just created (expect success)"
+        id: tc2_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Micro-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-2.2: Create a second MicroService on the same (now-existing) instance (expect success)"
+        id: tc2_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Micro2-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: "{}"
+
+      # ---------- System Component ----------
+
+      - name: "TC-3.1: Create System Component with Type (expect success)"
+        id: tc3_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-Component-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": "True"
+            }
+
+      - name: "TC-3.2: System Component create fails without Type (expect FAILURE)"
+        id: tc3_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-Component2-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: "{}"
+
+      # ---------- Negative / validation ----------
+
+      - name: "TC-4.1: autocreate false never creates (expect FAILURE)"
+        id: tc4_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-NeverCreated-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: false
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
+
+      - name: "TC-4.2: Invalid resourceType rejected (expect FAILURE)"
+        id: tc4_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Bogus Type"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+      - name: "TC-4.3: MicroService missing systemInstance rejected (expect FAILURE)"
+        id: tc4_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+      # ======================================================================
+      # NEW — Resource ID (APM ID) on System create
+      # ======================================================================
+
+      - name: "TC-5.1: Environment Instance creates new System with Resource ID (expect success)"
+        id: tc5_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-ResSys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-ResSys-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Resource ID": "APM-E2E-${{ env.RUN }}-1"
+            }
+
+      - name: "TC-5.2: MicroService cascade creates new System with Resource ID (expect success)"
+        id: tc5_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-ResMicro-${{ env.RUN }}"
+          systemInstance: "E2E-ResMicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-ResMicroSys-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
               "Type": "Cloud",
               "Core": "True",
-              "Resource ID": "APM-10045"
+              "Resource ID": "APM-E2E-${{ env.RUN }}-2"
             }
+
+      - name: "TC-5.3: Resource ID with an existing System is ignored, instance still created (expect success)"
+        id: tc5_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-ResSys-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-ResSys-${{ env.RUN }}",
+              "Environment": "DEV Env",
+              "Resource ID": "APM-SHOULD-NOT-OVERWRITE"
+            }
+
+      - name: "TC-5.4: Resource ID in metadata does not affect System Component create (expect success)"
+        id: tc5_4
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-ResComponent-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Resource ID": "APM-E2E-${{ env.RUN }}-COMP"
+            }
+
+      - name: "TC-5.5: Resource ID in metadata does not affect a plain update (expect success)"
+        id: tc5_5
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-ResSys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-ResSys-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Resource ID": "APM-SHOULD-NOT-OVERWRITE"
+            }
+
+      # ---------- Verify the Resource ID actually landed in Enov8 ----------
+
+      - name: "TC-5.6: Verify Resource ID values on the created Systems"
+        id: tc5_6
+        continue-on-error: true
+        env:
+          BASE: ${{ secrets.ENOV8_BASE_URL }}
+          APP_ID: ${{ secrets.ENOV8_APP_ID }}
+          APP_KEY: ${{ secrets.ENOV8_APP_KEY }}
+        run: |
+          get_resource_id() {
+            local name="$1"
+            local resp
+            resp=$(curl -sS -G "${BASE%/}/api/System" \
+              --data-urlencode "Resource%20Name=${name}" \
+              -H "user-id: ${APP_ID}" -H "app-id: ${APP_ID}" -H "app-key: ${APP_KEY}")
+            echo "$resp" | jq -r --arg n "$name" '
+              (if type == "array" then . else [.] end)
+              | map(select(.["Resource Name"] == $n))
+              | (.[0]["Resource ID"] // "")'
+          }
+
+          fail=0
+          check() {
+            local name="$1" expected="$2"
+            local actual
+            actual=$(get_resource_id "$name")
+            if [ "$actual" = "$expected" ]; then
+              echo "✅ ${name}: Resource ID = '${actual}'"
+            else
+              echo "❌ ${name}: expected '${expected}', got '${actual}'"
+              fail=1
+            fi
+          }
+
+          # New Systems created with a Resource ID
+          check "E2E-ResSys-${RUN}"      "APM-E2E-${RUN}-1"   # TC-5.1 (and not overwritten by 5.3 / 5.5)
+          check "E2E-ResMicroSys-${RUN}" "APM-E2E-${RUN}-2"   # TC-5.2
+
+          # Systems created WITHOUT a Resource ID must stay empty (regression)
+          check "E2E-Sys-${RUN}"         ""                   # TC-1.3
+          check "E2E-MicroSys-${RUN}"    ""                   # TC-2.3
+
+          exit $fail
+
+      # ======================================================================
+      # Summary
+      # ======================================================================
+
+      - name: Summarize results
+        if: always()
+        run: |
+          declare -A EXPECT=(
+            [tc1_3]=success [tc1_1]=success [tc1_2]=success
+            [tc2_3]=success [tc2_1]=success [tc2_2]=success
+            [tc3_1]=success [tc3_2]=failure
+            [tc4_1]=failure [tc4_2]=failure [tc4_3]=failure
+            [tc5_1]=success [tc5_2]=success [tc5_3]=success
+            [tc5_4]=success [tc5_5]=success [tc5_6]=success
+          )
+          declare -A LABEL=(
+            [tc1_3]="TC-1.3 Create System Instance + System cascade"
+            [tc1_1]="TC-1.1 Update System Instance"
+            [tc1_2]="TC-1.2 Create instance, System already exists"
+            [tc2_3]="TC-2.3 Create MicroService, full cascade"
+            [tc2_1]="TC-2.1 Update MicroService"
+            [tc2_2]="TC-2.2 Create MicroService, instance already exists"
+            [tc3_1]="TC-3.1 Create System Component"
+            [tc3_2]="TC-3.2 System Component create fails without Type"
+            [tc4_1]="TC-4.1 autocreate false never creates"
+            [tc4_2]="TC-4.2 Invalid resourceType rejected"
+            [tc4_3]="TC-4.3 MicroService missing systemInstance rejected"
+            [tc5_1]="TC-5.1 New System gets Resource ID (Environment Instance)"
+            [tc5_2]="TC-5.2 New System gets Resource ID (MicroService cascade)"
+            [tc5_3]="TC-5.3 Existing System, Resource ID ignored"
+            [tc5_4]="TC-5.4 System Component unaffected by Resource ID"
+            [tc5_5]="TC-5.5 Update unaffected by Resource ID"
+            [tc5_6]="TC-5.6 Verify Resource ID values in Enov8"
+          )
+
+          echo "## E2E Test Suite Results (run ${RUN})" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Test Case | Expected | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+
+          overall=0
+          for id in tc1_3 tc1_1 tc1_2 tc2_3 tc2_1 tc2_2 tc3_1 tc3_2 tc4_1 tc4_2 tc4_3 tc5_1 tc5_2 tc5_3 tc5_4 tc5_5 tc5_6; do
+            outcome_var="STEP_OUTCOME_${id}"
+            actual="${!outcome_var}"
+            expected="${EXPECT[$id]}"
+            label="${LABEL[$id]}"
+
+            if [ "$actual" = "$expected" ]; then
+              mark="✅ PASS"
+            else
+              mark="❌ FAIL"
+              overall=1
+            fi
+
+            echo "| ${label} | ${expected} | ${actual} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$overall" -eq 0 ]; then
+            echo "**All test cases matched their expected outcome.**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**One or more test cases did NOT match their expected outcome — see table above.**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          exit $overall
+        env:
+          STEP_OUTCOME_tc1_3: ${{ steps.tc1_3.outcome }}
+          STEP_OUTCOME_tc1_1: ${{ steps.tc1_1.outcome }}
+          STEP_OUTCOME_tc1_2: ${{ steps.tc1_2.outcome }}
+          STEP_OUTCOME_tc2_3: ${{ steps.tc2_3.outcome }}
+          STEP_OUTCOME_tc2_1: ${{ steps.tc2_1.outcome }}
+          STEP_OUTCOME_tc2_2: ${{ steps.tc2_2.outcome }}
+          STEP_OUTCOME_tc3_1: ${{ steps.tc3_1.outcome }}
+          STEP_OUTCOME_tc3_2: ${{ steps.tc3_2.outcome }}
+          STEP_OUTCOME_tc4_1: ${{ steps.tc4_1.outcome }}
+          STEP_OUTCOME_tc4_2: ${{ steps.tc4_2.outcome }}
+          STEP_OUTCOME_tc4_3: ${{ steps.tc4_3.outcome }}
+          STEP_OUTCOME_tc5_1: ${{ steps.tc5_1.outcome }}
+          STEP_OUTCOME_tc5_2: ${{ steps.tc5_2.outcome }}
+          STEP_OUTCOME_tc5_3: ${{ steps.tc5_3.outcome }}
+          STEP_OUTCOME_tc5_4: ${{ steps.tc5_4.outcome }}
+          STEP_OUTCOME_tc5_5: ${{ steps.tc5_5.outcome }}
+          STEP_OUTCOME_tc5_6: ${{ steps.tc5_6.outcome }}
