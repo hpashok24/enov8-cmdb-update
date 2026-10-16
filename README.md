@@ -276,7 +276,7 @@ gdw dev     ❌
 | `Business Unit` | `Other` | Used only if `System` is being created. |
 | `Type` | `Other` | The System's Type. Used only if `System` is being created. Must match a value already configured in the tenant's System Type picklist. |
 | `Core` | `False` | Used only if `System` is being created. |
-| `Resource ID` | — (optional) | Stored in the System's **Resource ID** field — use this for your APM ID or other application identifier. Used only if `System` is being created; an existing System's Resource ID is never changed. |
+| `Resource ID` | — (optional) | Stored in the System's **Resource ID** field — use this for your APM ID or other application identifier. Used only if `System` is being created. |
 
 For `MicroService`, the same rules apply one level down: `systemInstance` is resolved first, and if it does not exist, it is created using `Environment`/`System`/`Business Unit`/`Type`/`Core`/`Resource ID` from `metadata`.
 
