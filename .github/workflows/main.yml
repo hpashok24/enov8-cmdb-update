@@ -1,17 +1,31 @@
-name: Send Enov8 Update
+name: Enov8 CMDB Update
+
 on:
   workflow_dispatch:
 
 jobs:
-  notify-enov8:
+  update-microservice:
     runs-on: ubuntu-latest
+    environment: dev
+
     steps:
-      - name: Update CMDB in Enov8
-        uses: hpashok24/enov8-cmdb-update@main
+      - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
         with:
-          resourceType: "Environment Instance"
-          resourceName: "GDW (DEV)"
-          version: "18.0.102"
-          app_id:  ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "Reporting Service"
+          systemInstance: "Vivid (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "Vivid",
+              "Environment": "DEV Env",
+              "Business Unit": "Products",
+              "Type": "Cloud",
+              "Core": "True",
+              "Resource ID": "APM-12345"
+            }
