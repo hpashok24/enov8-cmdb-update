@@ -22,7 +22,7 @@ jobs:
           autocreate: true
           metadata: |
             {
-              "System": "Vivid",
+              "System": "Vivid123",
               "Environment": "DEV Env",
               "Business Unit": "Products",
               "Type": "Cloud",
