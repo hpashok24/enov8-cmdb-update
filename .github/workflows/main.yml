@@ -9,7 +9,7 @@ jobs:
     environment: dev
 
     steps:
-        - name: Enov8 - Deployment Version Update
+      - name: Enov8 - Deployment Version Update
         uses: enov8-Ltd/enov8-update-deployment-version@v1.2.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
