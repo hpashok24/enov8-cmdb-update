@@ -9,23 +9,22 @@ jobs:
     environment: dev
 
     steps:
-      - name: Enov8 - Deployment Version Update
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        - name: Enov8 - Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.2.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "MicroService"
-          resourceName: "Billing Service"
-          systemInstance: "OrbitPay (DEV)"
+          resourceType: "Environment Instance"
+          resourceName: "NewSystem (DEV)"
           version: "1.0.0"
           autocreate: true
           metadata: |
             {
-              "System": "OrbitPay",
+              "System": "NewSystem",
               "Environment": "DEV Env",
-              "Business Unit": "Products",
+              "Business Unit": "IT",
               "Type": "Cloud",
               "Core": "True",
-              "Resource ID": "APM-20871"
+              "Resource ID": "APM-12345"
             }
