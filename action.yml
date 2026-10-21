@@ -29,7 +29,7 @@ inputs:
     default: 'false'
 
   metadata:
-    description: 'Used when autocreate is true and resourceName does not exist yet. For Environment Instance/System Interface/MicroService: "Status" (default "InOperation"), "System", "Environment", "Business Unit" (default "Other"), "Type" (default "Other"), "Core" (default "False"), "Resource ID" (optional, e.g. an APM ID, saved to the System''s Resource ID field) — "System"/"Environment" resolved by name automatically; "Business Unit"/"Type"/"Core"/"Resource ID" only used if "System" also needs creating, Type must be a value configured in your tenant System Type picklist (e.g. Other, Cloud, Azure, AWS, GCP, Windows, Linux, Mainframe, Non-Mainframe, Middleware, Container, Interface, MicroService, Legacy, PC Client Server). Example: {"System": "GDW", "Environment": "DEV Env"}. When resourceType is MicroService, this cascade-creates systemInstance (and its System) before the MicroService. For System Component (no System/Environment dependency): "Status" (default "InOperation"), "Type" (REQUIRED, no default — a separate tenant-specific Component Type picklist, e.g. Server, Database, Module, Integration), "Monitored" (default "False"). Example: {"Type": "Server"}. In all cases, "Assigned To" and "Organisation" are always resolved automatically and must not be supplied.'
+    description: 'Used when autocreate is true and resourceName does not exist yet. For Environment Instance/System Interface/MicroService: "Status" (default "InOperation"), "System", "Environment", "Business Unit" (default "Other"), "Type" (default "Other"), "Core" (default "False"), "Resource ID" (optional, e.g. an APM ID, saved to the System''s Resource ID field) — "System"/"Environment" resolved by name automatically; "Business Unit"/"Type"/"Core"/"Resource ID" only used if "System" also needs creating, Type must be a value configured in your tenant System Type picklist (e.g. Other, Cloud, Azure, AWS, GCP, Windows, Linux, Mainframe, Non-Mainframe, Middleware, Container, Interface, MicroService, Legacy, PC Client Server). Example: {"System": "GDW", "Environment": "DEV Env"}. When resourceType is MicroService, this cascade-creates systemInstance (and its System) before the MicroService. For System Component (no System/Environment dependency): "Status" (default "InOperation"), "Type" (REQUIRED, no default — a separate tenant-specific Component Type picklist, e.g. Server, Database, Module, Integration), "Monitored" (default "False"). "Core" and "Monitored" accept true/false as JSON booleans or strings. Example: {"Type": "Server"}. In all cases, "Assigned To" and "Organisation" are always resolved automatically and must not be supplied.'
     required: false
 
   app_id:
@@ -45,9 +45,17 @@ inputs:
     required: true
 
   insecure_skip_tls_verify:
-    description: 'Set to true to skip TLS verification (not recommended)'
+    description: 'Set to true to skip TLS certificate verification. Only for on-prem Enov8 instances with self-signed certificates (not recommended otherwise).'
     required: false
     default: 'false'
+
+outputs:
+  result:
+    description: 'Raw JSON response from the Enov8 API for the target resource.'
+  created:
+    description: '"true" if this run created the target resource, "false" if it updated it (or it was already up to date).'
+  resource-id:
+    description: 'Enov8 ID (ECO-...) of the target resource.'
 
 runs:
   using: 'node24'

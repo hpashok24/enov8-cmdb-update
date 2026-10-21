@@ -2,6 +2,9 @@ const https = require('https');
 const { URL } = require('url');
 const fs = require('fs');
 
+// Set once per run from insecure_skip_tls_verify and applied to every request.
+let tlsOptions = {};
+
 function getInput(name, required = false) {
   const v = process.env[`INPUT_${name.toUpperCase()}`] || '';
 
@@ -12,6 +15,47 @@ function getInput(name, required = false) {
   return v.trim();
 }
 
+// Enov8 only accepts the strings "True"/"False" — also accept JSON booleans and any-case strings.
+function normalizeBool(value, defaultValue, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'True' : 'False';
+  }
+
+  const s = String(value).trim().toLowerCase();
+
+  if (s === 'true') return 'True';
+  if (s === 'false') return 'False';
+
+  throw new Error(`metadata.${fieldName} must be true or false, got: ${JSON.stringify(value)}`);
+}
+
+// Parses metadata and trims leading/trailing whitespace from every key and string value.
+function parseMetadata(raw) {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`Invalid metadata JSON: ${e.message}`);
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('metadata must be a JSON object, e.g. {"System": "GDW"}');
+  }
+
+  const out = {};
+
+  for (const [k, v] of Object.entries(parsed)) {
+    out[k.trim()] = typeof v === 'string' ? v.trim() : v;
+  }
+
+  return out;
+}
+
 function request(method, urlStr, payload, headers) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
@@ -19,8 +63,10 @@ function request(method, urlStr, payload, headers) {
     const options = {
       method,
       hostname: url.hostname,
+      port: url.port ? Number(url.port) : 443,
       path: url.pathname + url.search,
-      headers
+      headers,
+      ...tlsOptions
     };
 
     const req = https.request(options, (res) => {
@@ -113,6 +159,8 @@ async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitN
 
   console.log(`⚠️ System "${systemName}" not found — creating it`);
 
+  const core = normalizeBool(systemCore, 'False', 'Core');
+
   const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', businessUnitName || 'Other');
 
   const payload = JSON.stringify({
@@ -123,7 +171,7 @@ async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitN
     'Assigned To': assignedToId,
     'Organisation': organisationId,
     'Type': systemType || 'Other',
-    'Core': systemCore || 'False'
+    'Core': core
   });
 
   const systemUrl = `${baseUrl}/api/System`;
@@ -143,6 +191,14 @@ async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitN
     && res.parsed.result.find(r => r.success === true);
 
   if (!created) {
+    // A parallel run may have created it between our lookup and our POST — reuse it instead of failing.
+    const raced = await tryResolveByName(baseUrl, headers, 'System', 'Resource Name', systemName);
+
+    if (raced) {
+      console.log(`⚠️ System "${systemName}" was created by another run in the meantime — reusing it (${raced})`);
+      return raced;
+    }
+
     throw new Error(`❌ Failed to create System "${systemName}": ${res.body}`);
   }
 
@@ -198,6 +254,13 @@ async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, met
     && res.parsed.result.some(r => r.success === true);
 
   if (!created) {
+    const raced = await tryResolveByName(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
+
+    if (raced) {
+      console.log(`⚠️ System Instance "${instanceName}" was created by another run in the meantime — reusing it`);
+      return instanceName;
+    }
+
     throw new Error(`❌ Failed to create System Instance "${instanceName}": ${res.body}`);
   }
 
@@ -206,10 +269,27 @@ async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, met
   return instanceName;
 }
 
-function writeOutput(res) {
+// The record's ECO ID: on create/update it's in result[], on a no-op update only in "value passed".
+function extractResourceId(parsed) {
+  if (!parsed || typeof parsed !== 'object') return '';
+
+  const fromResult = Array.isArray(parsed.result) ? parsed.result.find(r => r && r['System ID']) : null;
+
+  if (fromResult) return fromResult['System ID'];
+
+  const passed = Array.isArray(parsed['value passed']) ? parsed['value passed'][0] : null;
+
+  return (passed && passed['System ID']) || '';
+}
+
+function writeOutput(res, created) {
+  if (!process.env.GITHUB_OUTPUT) return;
+
   fs.appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `result=${JSON.stringify(res.parsed || res.body)}\n`
+    `result=${JSON.stringify(res.parsed || res.body)}\n` +
+    `created=${created ? 'true' : 'false'}\n` +
+    `resource-id=${extractResourceId(res.parsed)}\n`
   );
 }
 
@@ -217,6 +297,24 @@ async function run() {
   try {
 
     const baseUrl = getInput('enov8_url', true).replace(/\/+$/, '');
+
+    let parsedBaseUrl;
+
+    try {
+      parsedBaseUrl = new URL(baseUrl);
+    } catch {
+      throw new Error('enov8_url is not a valid URL — expected https://<host>[:port]/ecosystem');
+    }
+
+    if (parsedBaseUrl.protocol !== 'https:') {
+      throw new Error('enov8_url must start with https://');
+    }
+
+    if (getInput('insecure_skip_tls_verify').toLowerCase() === 'true') {
+      tlsOptions = { rejectUnauthorized: false };
+      console.warn('⚠️ insecure_skip_tls_verify is enabled — TLS certificate verification is DISABLED. Only use this for on-prem Enov8 instances with self-signed certificates.');
+    }
+
     const resourceName = getInput('resourceName', true);
     const resourceType = getInput('resourceType', true);
 
@@ -290,13 +388,13 @@ async function run() {
 
     if (updateRes.parsed && updateRes.parsed.total_updated > 0) {
       console.log('✅ Enov8 CMDB updated successfully');
-      writeOutput(updateRes);
+      writeOutput(updateRes, false);
       return;
     }
 
     if (updateRes.parsed && updateRes.parsed.success === true) {
       console.log('⚠️ No update applied (already up-to-date or invalid field)');
-      writeOutput(updateRes);
+      writeOutput(updateRes, false);
       return;
     }
 
@@ -311,13 +409,7 @@ async function run() {
 
     console.log(`⚠️ No existing "${resourceName}" found — attempting to create it using metadata`);
 
-    let metadata;
-
-    try {
-      metadata = JSON.parse(metadataRaw);
-    } catch (e) {
-      throw new Error(`Invalid metadata JSON: ${e.message}`);
-    }
+    const metadata = parseMetadata(metadataRaw);
 
     const status = metadata['Status'] || 'InOperation';
 
@@ -351,7 +443,7 @@ async function run() {
         'Resource Name': resourceName,
         'Status': status,
         'Type': componentType,
-        'Monitored': metadata['Monitored'] || 'False',
+        'Monitored': normalizeBool(metadata['Monitored'], 'False', 'Monitored'),
         'Assigned To': assignedToId,
         'Organisation': organisationId
       };
@@ -400,7 +492,7 @@ async function run() {
     }
 
     console.log('✅ Enov8 CMDB resource created successfully');
-    writeOutput(createRes);
+    writeOutput(createRes, true);
 
   } catch (err) {
 
