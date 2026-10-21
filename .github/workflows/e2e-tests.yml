@@ -1,10 +1,45 @@
 name: E2E Test Suite
 
+# Tests the code on this repo's main branch (hpashok24/enov8-cmdb-update@main).
+
 on:
   workflow_dispatch:
 
 jobs:
+  # TC-7.1: three legs run at once, each creating an instance on the same brand-new System.
+  # Whichever leg loses the race to create the System must reuse it, not fail.
+  parallel-creates:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    strategy:
+      fail-fast: false
+      matrix:
+        leaf: [A, B, C]
+
+    env:
+      RUN: ${{ github.run_id }}
+
+    steps:
+      - name: "TC-7.1 leg ${{ matrix.leaf }}: create an instance on a System shared by all legs (expect success)"
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Par-${{ matrix.leaf }}-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Par-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
+
   e2e-tests:
+    needs: parallel-creates
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     environment: dev
 
@@ -17,7 +52,7 @@ jobs:
       - name: "TC-1.3: Create System Instance with System cascade (expect success)"
         id: tc1_3
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -35,7 +70,19 @@ jobs:
       - name: "TC-1.1: Update the System Instance just created (expect success)"
         id: tc1_1
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-6.4: Re-run the same version - no-op must still succeed (expect success)"
+        id: tc6_4
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -47,7 +94,7 @@ jobs:
       - name: "TC-1.2: Create a second instance on the same (now-existing) System (expect success)"
         id: tc1_2
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -67,7 +114,7 @@ jobs:
       - name: "TC-2.3: Create MicroService with full cascade (expect success)"
         id: tc2_3
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -89,7 +136,7 @@ jobs:
       - name: "TC-2.1: Update the MicroService just created (expect success)"
         id: tc2_1
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -102,7 +149,7 @@ jobs:
       - name: "TC-2.2: Create a second MicroService on the same (now-existing) instance (expect success)"
         id: tc2_2
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -119,7 +166,7 @@ jobs:
       - name: "TC-3.1: Create System Component with Type (expect success)"
         id: tc3_1
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -137,7 +184,7 @@ jobs:
       - name: "TC-3.2: System Component create fails without Type (expect FAILURE)"
         id: tc3_2
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -153,7 +200,7 @@ jobs:
       - name: "TC-4.1: autocreate false never creates (expect FAILURE)"
         id: tc4_1
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -171,7 +218,7 @@ jobs:
       - name: "TC-4.2: Invalid resourceType rejected (expect FAILURE)"
         id: tc4_2
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
@@ -183,12 +230,97 @@ jobs:
       - name: "TC-4.3: MicroService missing systemInstance rejected (expect FAILURE)"
         id: tc4_3
         continue-on-error: true
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.1.0
+        uses: hpashok24/enov8-cmdb-update@main
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+      # ---------- JSON booleans for Core / Monitored ----------
+
+      - name: "TC-5.1: JSON boolean Core:true creates a System (expect success)"
+        id: tc5_1
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Bool-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Bool-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Core": true
+            }
+
+      - name: "TC-5.2: JSON boolean Monitored:true on a System Component (expect success)"
+        id: tc5_2
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-BoolComp-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": true
+            }
+
+      - name: "TC-5.3: Invalid boolean Core:maybe rejected before anything is created (expect FAILURE)"
+        id: tc5_3
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-BadBool-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-BadBool-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Core": "maybe"
+            }
+
+      # ---------- Connection options ----------
+
+      - name: "TC-8.1: insecure_skip_tls_verify does not break a normal run (expect success)"
+        id: tc8_1
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+          insecure_skip_tls_verify: true
+
+      - name: "TC-8.2: http:// URL rejected before any network call (expect FAILURE)"
+        id: tc8_2
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@main
+        with:
+          enov8_url: "http://example.invalid/ecosystem"
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
           resourceName: "Anything"
           version: "1.0.0"
 
@@ -202,6 +334,9 @@ jobs:
             [tc2_3]=success [tc2_1]=success [tc2_2]=success
             [tc3_1]=success [tc3_2]=failure
             [tc4_1]=failure [tc4_2]=failure [tc4_3]=failure
+            [tc5_1]=success [tc5_2]=success [tc5_3]=failure
+            [tc6_4]=success
+            [tc8_1]=success [tc8_2]=failure
           )
           declare -A LABEL=(
             [tc1_3]="TC-1.3 Create System Instance + System cascade"
@@ -215,39 +350,65 @@ jobs:
             [tc4_1]="TC-4.1 autocreate false never creates"
             [tc4_2]="TC-4.2 Invalid resourceType rejected"
             [tc4_3]="TC-4.3 MicroService missing systemInstance rejected"
+            [tc5_1]="TC-5.1 JSON boolean Core:true accepted"
+            [tc5_2]="TC-5.2 JSON boolean Monitored:true accepted"
+            [tc5_3]="TC-5.3 Invalid boolean rejected"
+            [tc6_4]="TC-6.4 Same-version rerun succeeds (no-op)"
+            [tc8_1]="TC-8.1 insecure_skip_tls_verify on a valid cert"
+            [tc8_2]="TC-8.2 http:// URL rejected"
           )
+
+          overall=0
+
+          check() {
+            if [ "$3" = "$2" ]; then mark="✅ PASS"; else mark="❌ FAIL"; overall=1; fi
+            echo "| $1 | $2 | ${3:-(empty)} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          check_id() {
+            case "$2" in ECO-*) mark="✅ PASS" ;; *) mark="❌ FAIL"; overall=1 ;; esac
+            echo "| $1 | ECO-... | ${2:-(empty)} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+          }
 
           echo "## E2E Test Suite Results (run ${RUN})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Test Case | Expected | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
 
-          overall=0
-          for id in tc1_3 tc1_1 tc1_2 tc2_3 tc2_1 tc2_2 tc3_1 tc3_2 tc4_1 tc4_2 tc4_3; do
+          for id in tc1_3 tc1_1 tc1_2 tc2_3 tc2_1 tc2_2 tc3_1 tc3_2 tc4_1 tc4_2 tc4_3 tc5_1 tc5_2 tc5_3 tc6_4 tc8_1 tc8_2; do
             outcome_var="STEP_OUTCOME_${id}"
-            actual="${!outcome_var}"
-            expected="${EXPECT[$id]}"
-            label="${LABEL[$id]}"
-
-            if [ "$actual" = "$expected" ]; then
-              mark="✅ PASS"
-            else
-              mark="❌ FAIL"
-              overall=1
-            fi
-
-            echo "| ${label} | ${expected} | ${actual} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+            check "${LABEL[$id]}" "${EXPECT[$id]}" "${!outcome_var}"
           done
+
+          # Outputs (reuse the steps above, no extra API calls)
+          check    "TC-6.1 created=true after a create (TC-1.3)"            true  "$OUT_tc1_3_created"
+          check_id "TC-6.2 resource-id returned after a create (TC-1.3)"          "$OUT_tc1_3_id"
+          check    "TC-6.3 created=false after an update (TC-1.1)"          false "$OUT_tc1_1_created"
+          check    "TC-6.5 created=false on the no-op rerun (TC-6.4)"       false "$OUT_tc6_4_created"
+
+          same=differs
+          if [ -n "$OUT_tc1_3_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc1_1_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc6_4_id" ]; then same=same; fi
+          check    "TC-6.6 resource-id identical across create, update and no-op" same "$same"
+
+          # Parallel job (TC-7.1)
+          check    "TC-7.1 Parallel legs sharing one new System all succeed" success "$PAR_RESULT"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "$overall" -eq 0 ]; then
             echo "**All test cases matched their expected outcome.**" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "**One or more test cases did NOT match their expected outcome — see table above.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "**One or more test cases did NOT match their expected outcome - see table above.**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           exit $overall
         env:
+          PAR_RESULT: ${{ needs.parallel-creates.result }}
+          OUT_tc1_3_created: ${{ steps.tc1_3.outputs.created }}
+          OUT_tc1_3_id: ${{ steps.tc1_3.outputs.resource-id }}
+          OUT_tc1_1_created: ${{ steps.tc1_1.outputs.created }}
+          OUT_tc1_1_id: ${{ steps.tc1_1.outputs.resource-id }}
+          OUT_tc6_4_created: ${{ steps.tc6_4.outputs.created }}
+          OUT_tc6_4_id: ${{ steps.tc6_4.outputs.resource-id }}
           STEP_OUTCOME_tc1_3: ${{ steps.tc1_3.outcome }}
           STEP_OUTCOME_tc1_1: ${{ steps.tc1_1.outcome }}
           STEP_OUTCOME_tc1_2: ${{ steps.tc1_2.outcome }}
@@ -259,3 +420,9 @@ jobs:
           STEP_OUTCOME_tc4_1: ${{ steps.tc4_1.outcome }}
           STEP_OUTCOME_tc4_2: ${{ steps.tc4_2.outcome }}
           STEP_OUTCOME_tc4_3: ${{ steps.tc4_3.outcome }}
+          STEP_OUTCOME_tc5_1: ${{ steps.tc5_1.outcome }}
+          STEP_OUTCOME_tc5_2: ${{ steps.tc5_2.outcome }}
+          STEP_OUTCOME_tc5_3: ${{ steps.tc5_3.outcome }}
+          STEP_OUTCOME_tc6_4: ${{ steps.tc6_4.outcome }}
+          STEP_OUTCOME_tc8_1: ${{ steps.tc8_1.outcome }}
+          STEP_OUTCOME_tc8_2: ${{ steps.tc8_2.outcome }}
