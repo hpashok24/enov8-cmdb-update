@@ -1,4 +1,5 @@
 const https = require('https');
+const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
 
@@ -59,17 +60,18 @@ function parseMetadata(raw) {
 function request(method, urlStr, payload, headers) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
+    const isHttp = url.protocol === 'http:';
 
     const options = {
       method,
       hostname: url.hostname,
-      port: url.port ? Number(url.port) : 443,
+      port: url.port ? Number(url.port) : (isHttp ? 80 : 443),
       path: url.pathname + url.search,
       headers,
-      ...tlsOptions
+      ...(isHttp ? {} : tlsOptions)
     };
 
-    const req = https.request(options, (res) => {
+    const req = (isHttp ? http : https).request(options, (res) => {
       let data = '';
 
       res.on('data', (d) => data += d);
@@ -306,8 +308,12 @@ async function run() {
       throw new Error('enov8_url is not a valid URL — expected https://<host>[:port]/ecosystem');
     }
 
-    if (parsedBaseUrl.protocol !== 'https:') {
-      throw new Error('enov8_url must start with https://');
+    if (parsedBaseUrl.protocol !== 'https:' && parsedBaseUrl.protocol !== 'http:') {
+      throw new Error('enov8_url must start with https:// (or http:// on a trusted internal network)');
+    }
+
+    if (parsedBaseUrl.protocol === 'http:') {
+      console.warn('⚠️ enov8_url uses plain http:// — the App ID and App Key are sent unencrypted. Use this only on a trusted internal network.');
     }
 
     if (getInput('insecure_skip_tls_verify').toLowerCase() === 'true') {

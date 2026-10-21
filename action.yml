@@ -41,7 +41,7 @@ inputs:
     required: true
 
   enov8_url:
-    description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem)'
+    description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem). Use https://; http:// is accepted only for trusted internal networks and sends credentials unencrypted.'
     required: true
 
   insecure_skip_tls_verify:

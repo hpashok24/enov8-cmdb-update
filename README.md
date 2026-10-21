@@ -26,7 +26,7 @@ This action updates the deployed version for an Environment Instance, System Com
 
 | Name | Required | Description |
 |---|---|---|
-| `enov8_url` | ✅ | Base Enov8 URL, excluding `/api`. Must be `https://`; a custom port is supported (`https://host:8443/ecosystem`) |
+| `enov8_url` | ✅ | Base Enov8 URL, excluding `/api`. Use `https://`; a custom port is supported (`https://host:8443/ecosystem`). `http://` is also accepted for a trusted internal network, but credentials are then sent unencrypted and a warning is logged |
 | `app_id` | ✅ | Enov8 App ID credential |
 | `app_key` | ✅ | Enov8 App Key credential |
 | `resourceType` | ✅ | One of the resource types listed above |
@@ -350,7 +350,7 @@ The action calls the Enov8 API over HTTPS from the machine running the job.
 - **On-prem, behind a firewall or VPN:** GitHub-hosted runners can't reach it. Run the job on a [self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners) that can, by changing `runs-on: ubuntu-latest` to your runner's labels (for example `runs-on: [self-hosted, linux]`).
 - **Custom port:** include it in the URL, for example `https://enov8.internal.example.com:8443/ecosystem`.
 - **Self-signed or internal-CA certificate:** the preferred fix is to trust that CA on the runner. If that isn't possible, set `insecure_skip_tls_verify: true`. This disables certificate verification for the whole run and logs a warning, so use it only for on-prem instances you control.
-- Only `https://` URLs are supported.
+- **Plain `http://`:** accepted for a trusted internal network only. The App ID and App Key travel unencrypted, so the action logs a warning every time. Prefer `https://` wherever you can.
 
 ## 🔧 Configuring `metadata`
 
@@ -425,7 +425,7 @@ For `MicroService`, the same rules apply one level down: `systemInstance` is res
 **❌ Connection error (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`)**
 
 - The runner can't reach Enov8. For on-prem or firewalled instances use a self-hosted runner (see [Network access](#-network-access-and-self-hosted-runners))
-- Check the URL: it must be `https://`, may include a port, and must not include `/api`
+- Check the URL: it must start with `https://` (or `http://` on a trusted internal network), may include a port, and must not include `/api`
 
 **❌ Invalid resource type**
 

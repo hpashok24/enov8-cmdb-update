@@ -312,12 +312,12 @@ jobs:
           version: "1.0.1"
           insecure_skip_tls_verify: true
 
-      - name: "TC-8.2: http:// URL rejected before any network call (expect FAILURE)"
+      - name: "TC-8.2: Unsupported URL scheme (ftp://) rejected before any network call (expect FAILURE)"
         id: tc8_2
         continue-on-error: true
         uses: hpashok24/enov8-cmdb-update@main
         with:
-          enov8_url: "http://example.invalid/ecosystem"
+          enov8_url: "ftp://example.invalid/ecosystem"
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
@@ -355,7 +355,7 @@ jobs:
             [tc5_3]="TC-5.3 Invalid boolean rejected"
             [tc6_4]="TC-6.4 Same-version rerun succeeds (no-op)"
             [tc8_1]="TC-8.1 insecure_skip_tls_verify on a valid cert"
-            [tc8_2]="TC-8.2 http:// URL rejected"
+            [tc8_2]="TC-8.2 Unsupported URL scheme (ftp://) rejected"
           )
 
           overall=0
