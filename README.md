@@ -12,7 +12,7 @@ This action updates the deployed version for an Environment Instance, System Com
 - Supports four resource types: Environment Instance, System Component, System Interface, and MicroService
 - Populates the System's **Resource ID** (e.g. an APM ID) when a new System is created
 - Safe to re-run and safe to run in parallel (for example a build matrix) — a same-version re-run succeeds with a warning, and parallel jobs share any System or System Instance they both need to create
-- Exposes outputs (`created`, `resource-id`, `result`) so later steps can react to what happened
+- Exposes outputs (`created`, `resource-id`, `previous-version`, `result`) so later steps can react to what happened
 - Works with on-prem Enov8 instances: custom ports, self-hosted runners, and self-signed certificates
 
 ## 🧩 Supported Resource Types
@@ -48,6 +48,7 @@ This action updates the deployed version for an Environment Instance, System Com
 |---|---|
 | `created` | `true` if this run created `resourceName`, `false` if it updated it or it was already up to date. Records created along the way (a System or System Instance) do not change this — it describes the target resource only. |
 | `resource-id` | The Enov8 ID (`ECO-…`) of the target resource. |
+| `previous-version` | The Version the resource held before this run — empty if it was just created or had no version. It is read just before the update (one extra read-only request); if that lookup fails the run carries on and this output is empty. |
 | `result` | The raw JSON response from the Enov8 API for the target resource. |
 
 Use them in a later step, for example to notify only when something was auto-created:
@@ -62,6 +63,10 @@ Use them in a later step, for example to notify only when something was auto-cre
       - name: Announce new onboarding
         if: steps.enov8.outputs.created == 'true'
         run: echo "Onboarded ${{ steps.enov8.outputs.resource-id }} into Enov8"
+
+      - name: Announce an upgrade
+        if: steps.enov8.outputs.created == 'false' && steps.enov8.outputs.previous-version != ''
+        run: echo "Upgraded from ${{ steps.enov8.outputs.previous-version }} to ${{ github.ref_name }}"
 ```
 
 ## ⚙️ Setup Guide

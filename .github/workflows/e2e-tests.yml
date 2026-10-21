@@ -390,6 +390,11 @@ jobs:
           if [ -n "$OUT_tc1_3_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc1_1_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc6_4_id" ]; then same=same; fi
           check    "TC-6.6 resource-id identical across create, update and no-op" same "$same"
 
+          # previous-version: what the resource held before each step ran
+          check    "TC-6.7 previous-version empty after a create (TC-1.3)"      "(none)" "${OUT_tc1_3_prev:-(none)}"
+          check    "TC-6.8 previous-version is the old version after an update (TC-1.1)" 1.0.0 "$OUT_tc1_1_prev"
+          check    "TC-6.9 previous-version equals current on a no-op rerun (TC-6.4)"    1.0.1 "$OUT_tc6_4_prev"
+
           # Parallel job (TC-7.1)
           check    "TC-7.1 Parallel legs sharing one new System all succeed" success "$PAR_RESULT"
 
@@ -409,6 +414,9 @@ jobs:
           OUT_tc1_1_id: ${{ steps.tc1_1.outputs.resource-id }}
           OUT_tc6_4_created: ${{ steps.tc6_4.outputs.created }}
           OUT_tc6_4_id: ${{ steps.tc6_4.outputs.resource-id }}
+          OUT_tc1_3_prev: ${{ steps.tc1_3.outputs.previous-version }}
+          OUT_tc1_1_prev: ${{ steps.tc1_1.outputs.previous-version }}
+          OUT_tc6_4_prev: ${{ steps.tc6_4.outputs.previous-version }}
           STEP_OUTCOME_tc1_3: ${{ steps.tc1_3.outcome }}
           STEP_OUTCOME_tc1_1: ${{ steps.tc1_1.outcome }}
           STEP_OUTCOME_tc1_2: ${{ steps.tc1_2.outcome }}

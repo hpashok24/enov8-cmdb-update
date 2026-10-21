@@ -271,6 +271,36 @@ async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, met
   return instanceName;
 }
 
+// The Version the resource holds right now ('' if it doesn't exist or has none).
+// Read-only and best effort: a failed lookup never fails the run.
+async function getCurrentVersion(url, headers, resourceType, resourceName, systemInstance) {
+  const isMicro = resourceType === 'MicroService';
+  const nameField = isMicro ? 'MicroService Name' : 'Resource Name';
+  const norm = (s) => String(s === undefined || s === null ? '' : s).trim().toLowerCase();
+
+  let query = `${encodeURIComponent(nameField)}=${encodeURIComponent(resourceName)}`;
+
+  if (isMicro) {
+    query += `&SystemInstance=${encodeURIComponent(systemInstance)}`;
+  }
+
+  try {
+    const res = await request('GET', `${url}?${query}`, undefined, headers);
+    const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
+
+    // A MicroService name is only unique within its System Instance, so match both.
+    const match = records.find(r => norm(r[nameField]) === norm(resourceName)
+      && (!isMicro || norm(r['SystemInstance']) === norm(systemInstance)));
+
+    const v = match ? match['Version'] : '';
+
+    return v === null || v === undefined ? '' : String(v);
+  } catch (e) {
+    console.log(`⚠️ Could not read the previous version: ${e.message}`);
+    return '';
+  }
+}
+
 // The record's ECO ID: on create/update it's in result[], on a no-op update only in "value passed".
 function extractResourceId(parsed) {
   if (!parsed || typeof parsed !== 'object') return '';
@@ -284,14 +314,18 @@ function extractResourceId(parsed) {
   return (passed && passed['System ID']) || '';
 }
 
-function writeOutput(res, created) {
+// Output values must stay on one line, or a stray newline could inject extra outputs.
+const oneLine = (v) => String(v === undefined || v === null ? '' : v).replace(/[\r\n]+/g, ' ');
+
+function writeOutput(res, created, previousVersion) {
   if (!process.env.GITHUB_OUTPUT) return;
 
   fs.appendFileSync(
     process.env.GITHUB_OUTPUT,
     `result=${JSON.stringify(res.parsed || res.body)}\n` +
     `created=${created ? 'true' : 'false'}\n` +
-    `resource-id=${extractResourceId(res.parsed)}\n`
+    `resource-id=${oneLine(extractResourceId(res.parsed))}\n` +
+    `previous-version=${oneLine(previousVersion)}\n`
   );
 }
 
@@ -366,6 +400,11 @@ async function run() {
       'app-key': appKey
     };
 
+    // ✅ Remember what the resource holds now, so later steps can see what this run replaced
+    const previousVersion = await getCurrentVersion(url, headers, resourceType, resourceName, systemInstance);
+
+    console.log(`ℹ️ Current version in Enov8: ${previousVersion || '(none)'}`);
+
     // ✅ Try update first
     const updatePayloadObj = {};
 
@@ -394,13 +433,13 @@ async function run() {
 
     if (updateRes.parsed && updateRes.parsed.total_updated > 0) {
       console.log('✅ Enov8 CMDB updated successfully');
-      writeOutput(updateRes, false);
+      writeOutput(updateRes, false, previousVersion);
       return;
     }
 
     if (updateRes.parsed && updateRes.parsed.success === true) {
       console.log('⚠️ No update applied (already up-to-date or invalid field)');
-      writeOutput(updateRes, false);
+      writeOutput(updateRes, false, previousVersion);
       return;
     }
 
@@ -498,7 +537,7 @@ async function run() {
     }
 
     console.log('✅ Enov8 CMDB resource created successfully');
-    writeOutput(createRes, true);
+    writeOutput(createRes, true, '');
 
   } catch (err) {
 
