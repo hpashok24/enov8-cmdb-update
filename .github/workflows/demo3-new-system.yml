@@ -1,0 +1,25 @@
+name: Demo 3 - Create Instance + New System with Resource ID
+
+# Run manually. It runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
+# The System does not exist yet, so there is no access list to check: the System (with its
+# Resource ID) and the instance are both created. Names include the run number so every run is fresh.
+on:
+  workflow_dispatch:
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Create instance + new System with Resource ID
+        uses: hpashok24/enov8-cmdb-update@ajoshy
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "Demo-App-${{ github.run_number }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "Demo-App-${{ github.run_number }}", "Environment": "DEV Env", "Resource ID": "APM-${{ github.run_number }}"}'
