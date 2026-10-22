@@ -1,0 +1,35 @@
+name: Demo 1 - Access Denied (NovaLink)
+
+# Run manually. It runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
+# That user is not in NovaLink's "Assigned To" group, so both changes are rejected.
+on:
+  workflow_dispatch:
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Create instance (rejected - no access to NovaLink)
+        continue-on-error: true
+        uses: hpashok24/enov8-cmdb-update@ajoshy
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "NovaLink (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "NovaLink", "Environment": "SIT Env"}'
+
+      - name: Update instance (rejected - no access to NovaLink)
+        uses: hpashok24/enov8-cmdb-update@ajoshy
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "NovaLink (DEV)"
+          version: "2.0.0"
