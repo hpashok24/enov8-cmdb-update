@@ -1,4 +1,4 @@
-name: Demo 1 - Access Denied (NovaLink)
+name: Demo 1 - Access Denied NovaLink
 
 # Run manually. It runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
 # That user is not in NovaLink's "Assigned To" group, so both changes are rejected.
