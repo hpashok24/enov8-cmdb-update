@@ -1,0 +1,34 @@
+name: Demo 2 - Access Allowed (GDW)
+
+# Run manually. It runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
+# That user is in GDW's "Assigned To" group (Enterprise IT), so both changes are allowed.
+on:
+  workflow_dispatch:
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Create instance (allowed - user has access to GDW)
+        uses: hpashok24/enov8-cmdb-update@ajoshy
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEMO)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "GDW", "Environment": "DEV Env"}'
+
+      - name: Update instance (allowed - user has access to GDW)
+        uses: hpashok24/enov8-cmdb-update@ajoshy
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "GDW (DEMO)"
+          version: "1.0.1"
