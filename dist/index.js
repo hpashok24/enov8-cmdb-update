@@ -3,6 +3,9 @@ const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
 
+// ✅ The GitHub username must equal the Enov8 User ID.
+const GITHUB_USERNAME_FIELD = 'User ID';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,33 +103,70 @@ function splitList(value) {
 // User validation & access control
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ✅ The user must exist in Enov8 and must not be inactive / awaiting approval
-async function validateUser(baseUrl, headers, userId) {
-  console.log(`🔐 Validating user "${userId}"`);
+// ✅ Identity comes from GitHub, never from the workflow file.
+// GITHUB_TRIGGERING_ACTOR / GITHUB_ACTOR are set by the GitHub runner and cannot be overwritten by a workflow.
+function getGitHubActor() {
+  const actor = (process.env.GITHUB_TRIGGERING_ACTOR || process.env.GITHUB_ACTOR || '').trim();
 
-  const user = await findRecord(baseUrl, headers, 'User', 'User ID', userId);
+  if (!actor) {
+    throw new Error('❌ Could not determine the GitHub user who triggered this run (GITHUB_TRIGGERING_ACTOR / GITHUB_ACTOR not set) — request rejected');
+  }
 
-  if (!user) {
-    throw new Error(`❌ User "${userId}" does not exist in the Enov8 Ecosystem — request rejected`);
+  if (/\[bot\]$/i.test(actor)) {
+    throw new Error(`❌ This run was triggered by a bot account ("${actor}"). Governed updates must be triggered by a person mapped to an Enov8 user — request rejected`);
+  }
+
+  return actor;
+}
+
+// ✅ Map the GitHub user to exactly one Enov8 user, then check that user is active
+async function resolveEnov8User(baseUrl, headers, githubUser) {
+  console.log(`🔐 GitHub user "${githubUser}" — looking up the mapped Enov8 user (${GITHUB_USERNAME_FIELD})`);
+
+  const url = `${baseUrl}/api/User?${encodeURIComponent(GITHUB_USERNAME_FIELD)}=${encodeURIComponent(githubUser)}`;
+  const res = await request('GET', url, undefined, headers);
+
+  // GitHub usernames are case-insensitive
+  let matches = toRecords(res.parsed).filter(r => sameText(r[GITHUB_USERNAME_FIELD], githubUser));
+
+  // Enov8's filter may be case-sensitive — fall back to a case-insensitive match across all users
+  if (matches.length === 0) {
+    const all = await request('GET', `${baseUrl}/api/User`, undefined, headers);
+    matches = toRecords(all.parsed).filter(r => sameText(r[GITHUB_USERNAME_FIELD], githubUser));
+  }
+
+  if (matches.length === 0) {
+    throw new Error(`❌ GitHub user "${githubUser}" is not mapped to any Enov8 user (no user has ${GITHUB_USERNAME_FIELD} = "${githubUser}") — request rejected`);
+  }
+
+  if (matches.length > 1) {
+    throw new Error(`❌ GitHub user "${githubUser}" is mapped to more than one Enov8 user (${matches.map(m => m['User ID']).join(', ')}) — request rejected until the mapping is fixed`);
+  }
+
+  const user = matches[0];
+  const userId = user['User ID'];
+
+  if (!userId) {
+    throw new Error(`❌ The Enov8 user mapped to GitHub user "${githubUser}" has no User ID — request rejected`);
   }
 
   // Enov8 stores e.g. "ActiveUser" / "InactiveUser"
   const status = user['User Status'] ?? user['Status'];
 
   if (status && !/^active/i.test(String(status).trim())) {
-    throw new Error(`❌ User "${userId}" is not active in the Enov8 Ecosystem (User Status: ${status}) — request rejected`);
+    throw new Error(`❌ Enov8 user "${userId}" (GitHub "${githubUser}") is not active (User Status: ${status}) — request rejected`);
   }
 
   // "Login Access" must be "Yes" (otherwise awaiting approval or rejected)
   const loginAccess = user['Login Access'];
 
   if (loginAccess !== undefined && loginAccess !== null && loginAccess !== '' && !sameText(loginAccess, 'Yes')) {
-    throw new Error(`❌ User "${userId}" does not have login access in the Enov8 Ecosystem (Login Access: ${loginAccess}) — request rejected`);
+    throw new Error(`❌ Enov8 user "${userId}" (GitHub "${githubUser}") does not have login access (Login Access: ${loginAccess}) — request rejected`);
   }
 
-  console.log(`✅ User "${userId}" exists${status ? ` (User Status: ${status})` : ''}`);
+  console.log(`✅ GitHub user "${githubUser}" → Enov8 user "${userId}"${status ? ` (User Status: ${status})` : ''}`);
 
-  return user;
+  return userId;
 }
 
 // ✅ Find a System: by Resource ID (APM ID) first, then by ECO ID or name
@@ -150,7 +190,6 @@ async function findSystem(baseUrl, headers, { systemRef, resourceId }) {
   return findRecord(baseUrl, headers, 'System', 'Resource Name', systemRef);
 }
 
-// "AD0004 - Ashley Hosking" -> "AD0004"
 function groupUserIds(groupUsers) {
   return splitList(groupUsers).map(entry => entry.split(' - ')[0].trim());
 }
@@ -361,8 +400,8 @@ async function run() {
     const appId = getInput('app_id', true);
     const appKey = getInput('app_key', true);
 
-    // ✅ Mandatory User ID
-    const userId = getInput('userid', true);
+    // ✅ Identity is taken from GitHub automatically — there is no userid input to type
+    const githubUser = getGitHubActor();
 
     const resourceType = getInput('resourceType', true);
     const resourceName = getInput('resourceName', true);
@@ -405,8 +444,8 @@ async function run() {
       'app-key': appKey
     };
 
-    // ✅ 1. User must exist (all resource types)
-    await validateUser(baseUrl, headers, userId);
+    // ✅ 1. GitHub user must map to an active Enov8 user (all resource types)
+    const userId = await resolveEnov8User(baseUrl, headers, githubUser);
 
     // ✅ 2. System access check (System Instance and MicroService, create and update) — before any write
     if (resourceType === 'Environment Instance' || resourceType === 'MicroService') {
