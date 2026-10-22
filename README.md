@@ -1,27 +1,38 @@
-# 🛡️ Enov8 - User Validated Deployment Update GitHub Action
+# 🛡️ Enov8 - Governed Deployment Version Update GitHub Action
 
 ## 🚀 Overview
 
+> **New in v1.3.0:** governed updates are on by default. Every run is checked against the Enov8 user mapped to the GitHub user who triggered it. Before upgrading, map each person who runs deployments to their Enov8 user — see [One-time setup](#-one-time-setup-map-github-users-to-enov8-users).
+
 This action updates the deployed version for an Environment Instance, System Component, System Interface, or MicroService in Enov8 directly from GitHub Actions, and can create the resource if it does not exist yet.
 
-Every request is made on behalf of an Enov8 user. Before anything is written to the CMDB, the action checks that the user exists and that they have access to the System the change affects. If any check fails, the request is rejected and nothing is created or updated.
+Every change is made **as the GitHub user who ran the workflow**. The action reads that identity from GitHub itself, maps it to an Enov8 user, and checks that user's access before anything is written to the CMDB. There is no user ID to type into the workflow, so a workflow author cannot act as someone else.
 
 ## ✨ Key Features
 
-- **Mandatory User ID** — every request must include `userid`
-- **User validation** — the user must exist, be active and have login access in the Enov8 Ecosystem
+- **Identity from GitHub, not from the workflow** — the user is taken from `GITHUB_TRIGGERING_ACTOR` (falling back to `GITHUB_ACTOR`), which GitHub sets and a workflow cannot overwrite
+- **Mapped to an Enov8 user** — the GitHub username must match an Enov8 user's **User ID** (not case-sensitive)
+- **User validation** — the Enov8 user must be active (`ActiveUser`) and have Login Access `Yes`
 - **System access control** — for Environment Instances and MicroServices, on both create and update, the user must be a member of the associated System's **Assigned To** group
 - **Validation before write** — rejected requests make no changes in Enov8
 - **System lookup by Resource ID** — the System is found by `Resource ID` (e.g. an APM ID) first, then by name
 - Creates missing resources on request, cascading through System Instance and System where needed
 
+## 👤 One-time setup: map GitHub users to Enov8 users
+
+Each person who will run deployments needs an Enov8 user whose **User ID** is the same as their **GitHub username** (for example GitHub `jsmith-dev` → Enov8 User ID `jsmith-dev`). Upper and lower case don't matter.
+
+- Because users are created in Enov8, only Enov8 administrators can decide who is who.
+- Runs triggered by bots (for example `dependabot[bot]`) are rejected. Deployments must be triggered by a mapped person.
+
 ## 🔐 How validation works
 
-### 1. User validation (all resource types)
+### 1. Identity and user validation (all resource types)
 
-The action looks up `userid` in Enov8 (`GET /api/User`). The request is rejected if:
+The action reads the GitHub user who triggered the run and looks up the Enov8 user whose **User ID** matches it (`GET /api/User`). The request is rejected if:
 
-- no user with that **User ID** exists,
+- the run was triggered by a bot account,
+- no Enov8 user is mapped to that GitHub username, or more than one is,
 - the user's **User Status** is not active (for example `InactiveUser`), or
 - the user's **Login Access** is not `Yes` (for example awaiting approval)
 
@@ -40,7 +51,7 @@ It then reads the System's **Assigned To** group (`GET /api/System`) and checks 
 
 If the System does not exist yet and is being created by the same run, there is no group to check against, so the access check is skipped and this is shown in the log.
 
-System Component and System Interface requests only need the user validation in step 1.
+System Component and System Interface requests only need the identity and user validation in step 1.
 
 ## 🧩 Supported Resource Types
 
@@ -53,7 +64,6 @@ System Component and System Interface requests only need the user validation in 
 
 | Name | Required | Description |
 |---|---|---|
-| `userid` | ✅ | Enov8 User ID (login ID, e.g. `AD0001`). Must match the User ID in Enov8 exactly. |
 | `enov8_url` | ✅ | Base Enov8 URL, excluding `/api` |
 | `app_id` | ✅ | Enov8 App ID credential |
 | `app_key` | ✅ | Enov8 App Key credential |
@@ -83,7 +93,11 @@ Go to **Settings → Secrets and variables → Actions** and add:
 
 If your repository uses GitHub Environments, add `environment: dev` (or your environment name) to the job so the environment's secrets are used.
 
-### Step 2 — Create Workflow
+### Step 2 — Map your GitHub users
+
+See [One-time setup](#-one-time-setup-map-github-users-to-enov8-users).
+
+### Step 3 — Create Workflow
 
 Create `.github/workflows/enov8.yml` using one of the examples below.
 
@@ -103,13 +117,12 @@ jobs:
     environment: dev
 
     steps:
-      - name: Enov8 - User Validated Deployment Update
-        uses: enov8-Ltd/enov8-user-validated-deployment-update@v1.0.0
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "AD0001"
           resourceType: "Environment Instance"
           resourceName: "GDW (DEV)"
           version: "18.0.12"
@@ -118,13 +131,12 @@ jobs:
 ### 🔄 Update an existing MicroService
 
 ```yaml
-      - name: Enov8 - User Validated Deployment Update
-        uses: enov8-Ltd/enov8-user-validated-deployment-update@v1.0.0
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "AD0001"
           resourceType: "MicroService"
           resourceName: "Web Portal"
           systemInstance: "GDW (DEV)"
@@ -134,13 +146,12 @@ jobs:
 ### 🆕 Create an Environment Instance on an existing System
 
 ```yaml
-      - name: Enov8 - User Validated Deployment Update
-        uses: enov8-Ltd/enov8-user-validated-deployment-update@v1.0.0
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "AD0001"
           resourceType: "Environment Instance"
           resourceName: "GDW (UAT)"
           version: "18.0.12"
@@ -156,13 +167,12 @@ jobs:
 ### 🧩 Create a MicroService, cascading through System Instance and System
 
 ```yaml
-      - name: Enov8 - User Validated Deployment Update
-        uses: enov8-Ltd/enov8-user-validated-deployment-update@v1.0.0
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "AD0001"
           resourceType: "MicroService"
           resourceName: "Web Portal"
           systemInstance: "NewSystem (DEV)"
@@ -184,13 +194,12 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 ### 🆕 System Component
 
 ```yaml
-      - name: Enov8 - User Validated Deployment Update
-        uses: enov8-Ltd/enov8-user-validated-deployment-update@v1.0.0
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "AD0001"
           resourceType: "System Component"
           resourceName: "AppServer_PROD_NewApp"
           version: "1.0"
@@ -205,8 +214,8 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 ## 🔍 Example Output
 
 ```text
-🔐 Validating user "AD0001"
-✅ User "AD0001" exists (User Status: ActiveUser)
+🔐 GitHub user "jsmith-dev" — looking up the mapped Enov8 user (User ID)
+✅ GitHub user "jsmith-dev" → Enov8 user "jsmith-dev" (User Status: ActiveUser)
 🔐 Checking access of "AD0001" to System "GDW" (Assigned To: Enterprise IT)
 ✅ User "AD0001" is a member of "Enterprise IT" — access granted to System "GDW"
 📡 PUT https://.../api/SystemInstance
@@ -243,12 +252,15 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 
 ## 🐛 Troubleshooting
 
-**❌ User "…" does not exist in the Enov8 Ecosystem**
+**❌ GitHub user "…" is not mapped to any Enov8 user**
 
-- Check `userid` matches the user's **User ID** in Enov8 exactly (Configuration → Add Data → Access Management)
-- Use the login User ID (e.g. `AD0001`), not the contact name or email
+- There is no Enov8 user whose **User ID** equals your GitHub username (shown in the log). Ask an Enov8 administrator to create one, or to use your GitHub username as your User ID
 
-**❌ User "…" is not active / does not have login access**
+**❌ This run was triggered by a bot account**
+
+- Governed updates must be started by a person. Trigger the workflow manually, or from a push or merge by a mapped user
+
+**❌ Enov8 user "…" is not active / does not have login access**
 
 - The user's **User Status** must be active (`ActiveUser`) and **Login Access** must be `Yes`
 - Ask an Enov8 administrator to activate the user or approve their access (Configuration → Add Data → Access Management)
@@ -272,10 +284,14 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 - Verify `ENOV8_APP_ID`, `ENOV8_APP_KEY` and `ENOV8_BASE_URL`
 - `ENOV8_BASE_URL` must end in `/ecosystem`, without `/api`
 
-## 🆘 Support
+## 🔒 Security notes
+
+This action makes sure the **person who ran the workflow** has access in Enov8. To keep that guarantee, also protect the Enov8 credentials themselves, since anyone who can read `ENOV8_APP_KEY` could call the Enov8 API directly:
+
+- Store the secrets in a GitHub **Environment** and add **required reviewers** or **deployment branch rules** to it
+- Restrict who can push to the branches that are allowed to deploy
+- Secrets are not passed to workflows triggered from forks
+
+## 📥 Support
 
 For assistance, contact support@enov8.com.
-
-## 📄 License
-
-[MIT](LICENSE)
