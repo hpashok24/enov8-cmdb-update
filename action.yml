@@ -1,12 +1,16 @@
-name: 'Enov8 - Deployment Version Update'
-description: 'Update (or create) Enov8 CMDB resources (Environment Instance, System Component, System Interface, MicroService) version'
+name: 'Enov8 - User Validated Deployment Update'
+description: 'Update or create Enov8 CMDB resource versions, validating the user exists and has access to the System first.'
 author: 'Enov8 Ltd'
 
 branding:
-  icon: 'layers'
+  icon: 'shield'
   color: 'green'
 
 inputs:
+  userid:
+    description: 'REQUIRED. Enov8 User ID the request is made on behalf of. The user must exist in the Enov8 Ecosystem with an active User Status and Login Access set to Yes. For Environment Instance and MicroService (create and update), the user must also be a member of the Assigned To group of the associated System.'
+    required: true
+
   resourceType:
     description: 'Supported values: Environment Instance | System Component | System Interface | MicroService'
     required: true
@@ -24,12 +28,12 @@ inputs:
     required: true
 
   autocreate:
-    description: 'Boolean. When true, create resourceName if it does not already exist (using metadata). When false (default), a not-found resourceName is always an error. Can be written unquoted (true/false) in the workflow YAML.'
+    description: 'Boolean. When true, create resourceName if it does not already exist (using metadata). When false (default), a not-found resourceName is always an error.'
     required: false
     default: 'false'
 
   metadata:
-    description: 'Used when autocreate is true and resourceName does not exist yet. For Environment Instance/System Interface/MicroService: "Status" (default "InOperation"), "System", "Environment", "Business Unit" (default "Other"), "Type" (default "Other"), "Core" (default "False"), "Resource ID" (optional, e.g. an APM ID, saved to the System''s Resource ID field) — "System"/"Environment" resolved by name automatically; "Business Unit"/"Type"/"Core"/"Resource ID" only used if "System" also needs creating, Type must be a value configured in your tenant System Type picklist (e.g. Other, Cloud, Azure, AWS, GCP, Windows, Linux, Mainframe, Non-Mainframe, Middleware, Container, Interface, MicroService, Legacy, PC Client Server). Example: {"System": "GDW", "Environment": "DEV Env"}. When resourceType is MicroService, this cascade-creates systemInstance (and its System) before the MicroService. For System Component (no System/Environment dependency): "Status" (default "InOperation"), "Type" (REQUIRED, no default — a separate tenant-specific Component Type picklist, e.g. Server, Database, Module, Integration), "Monitored" (default "False"). "Core" and "Monitored" accept true/false as JSON booleans or strings. Example: {"Type": "Server"}. In all cases, "Assigned To" and "Organisation" are always resolved automatically and must not be supplied.'
+    description: 'Used when autocreate is true and resourceName does not exist yet. For Environment Instance/System Interface/MicroService: "Status" (default "InOperation"), "System", "Environment", "Business Unit" (default "Other"), "Type" (default "Other"), "Core" (default "False"), "Resource ID" (optional, e.g. an APM ID). The System is found by "Resource ID" first, then by "System" name; if neither matches, it is created with those values. Example: {"System": "GDW", "Environment": "DEV Env", "Resource ID": "APM-12345"}. For System Component: "Status" (default "InOperation"), "Type" (REQUIRED, e.g. Server, Database), "Monitored" (default "False"). "Assigned To" and "Organisation" are always resolved automatically and must not be supplied.'
     required: false
 
   app_id:
@@ -41,23 +45,12 @@ inputs:
     required: true
 
   enov8_url:
-    description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem). Use https://; http:// is accepted only for trusted internal networks and sends credentials unencrypted.'
+    description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem)'
     required: true
-
-  insecure_skip_tls_verify:
-    description: 'Set to true to skip TLS certificate verification. Only for on-prem Enov8 instances with self-signed certificates (not recommended otherwise).'
-    required: false
-    default: 'false'
 
 outputs:
   result:
-    description: 'Raw JSON response from the Enov8 API for the target resource.'
-  created:
-    description: '"true" if this run created the target resource, "false" if it updated it (or it was already up to date).'
-  resource-id:
-    description: 'Enov8 ID (ECO-...) of the target resource.'
-  previous-version:
-    description: 'The Version the resource held before this run. Empty if it was just created or had no version.'
+    description: 'JSON response returned by the Enov8 API'
 
 runs:
   using: 'node24'
