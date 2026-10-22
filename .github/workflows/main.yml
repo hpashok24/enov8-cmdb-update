@@ -1,24 +1,24 @@
-name: E2E Test Suite (User Validation)
+name: E2E Test Suite (Governed)
 
+# Run this manually. The identity used is YOUR GitHub user (the person who clicks "Run workflow"),
+# which must match an Enov8 User ID.
 on:
   workflow_dispatch:
     inputs:
-      has_access_user:
-        description: "User ID that IS in the Assigned To group of existing_system"
-        required: true
-        default: "DemoAdmin"
-      no_access_user:
-        description: "User ID that exists (ActiveUser, Login Access Yes) but is NOT in that group"
-        required: true
-        default: "DemoEM"
       existing_system:
-        description: "Name of an existing System to create test records on"
+        description: "Existing System whose Assigned To group YOU are a member of"
         required: true
         default: "GDW"
       environment:
         description: "Existing Environment name"
         required: true
         default: "UAT Env"
+      no_access_system:
+        description: "Existing System whose Assigned To group you are NOT a member of"
+        required: true
+      no_access_instance:
+        description: "Existing System Instance of that no-access System"
+        required: true
 
 jobs:
   e2e-tests:
@@ -32,7 +32,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: "TC-1 Missing userid rejected (expect failure)"
+      - name: Show identity under test
+        run: echo "Running as GitHub user ${GITHUB_TRIGGERING_ACTOR}"
+
+      - name: "TC-1 Create instance on a System you can access (expect success)"
         id: tc1
         continue-on-error: true
         uses: ./
@@ -40,12 +43,13 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: ""
           resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
+          resourceName: "E2E-GOV-${{ env.RUN }} (DEV)"
           version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "${{ inputs.existing_system }}", "Environment": "${{ inputs.environment }}"}'
 
-      - name: "TC-2 Unknown user rejected (expect failure)"
+      - name: "TC-2 Update that instance (expect success)"
         id: tc2
         continue-on-error: true
         uses: ./
@@ -53,12 +57,11 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "E2E-NO-SUCH-USER-${{ env.RUN }}"
           resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
+          resourceName: "E2E-GOV-${{ env.RUN }} (DEV)"
+          version: "1.0.1"
 
-      - name: "TC-3 Create instance, user WITHOUT access rejected (expect failure)"
+      - name: "TC-3 Create MicroService on that instance (expect success)"
         id: tc3
         continue-on-error: true
         uses: ./
@@ -66,14 +69,14 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.no_access_user }}"
-          resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
+          resourceType: "MicroService"
+          resourceName: "E2E-GOV-Svc-${{ env.RUN }}"
+          systemInstance: "E2E-GOV-${{ env.RUN }} (DEV)"
           version: "1.0.0"
           autocreate: true
-          metadata: '{"System": "${{ inputs.existing_system }}", "Environment": "${{ inputs.environment }}"}'
+          metadata: '{}'
 
-      - name: "TC-4 Create instance, user WITH access (expect success)"
+      - name: "TC-4 Update that MicroService (expect success)"
         id: tc4
         continue-on-error: true
         uses: ./
@@ -81,14 +84,12 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
-          resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{"System": "${{ inputs.existing_system }}", "Environment": "${{ inputs.environment }}"}'
+          resourceType: "MicroService"
+          resourceName: "E2E-GOV-Svc-${{ env.RUN }}"
+          systemInstance: "E2E-GOV-${{ env.RUN }} (DEV)"
+          version: "1.0.1"
 
-      - name: "TC-5 Update instance, user WITH access (expect success)"
+      - name: "TC-5 Create instance on a System you CANNOT access (expect failure)"
         id: tc5
         continue-on-error: true
         uses: ./
@@ -96,12 +97,13 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
           resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "1.0.1"
+          resourceName: "E2E-GOV-NoAccess-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "${{ inputs.no_access_system }}", "Environment": "${{ inputs.environment }}"}'
 
-      - name: "TC-6 Update instance, user WITHOUT access rejected (expect failure)"
+      - name: "TC-6 Update an instance you CANNOT access (expect failure)"
         id: tc6
         continue-on-error: true
         uses: ./
@@ -109,12 +111,11 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.no_access_user }}"
           resourceType: "Environment Instance"
-          resourceName: "E2E-UV-${{ env.RUN }} (DEV)"
+          resourceName: "${{ inputs.no_access_instance }}"
           version: "9.9.9"
 
-      - name: "TC-7 Create MicroService, user WITH access (expect success)"
+      - name: "TC-7 Create MicroService on an instance you CANNOT access (expect failure)"
         id: tc7
         continue-on-error: true
         uses: ./
@@ -122,15 +123,14 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
           resourceType: "MicroService"
-          resourceName: "E2E-UV-Svc-${{ env.RUN }}"
-          systemInstance: "E2E-UV-${{ env.RUN }} (DEV)"
+          resourceName: "E2E-GOV-Svc2-${{ env.RUN }}"
+          systemInstance: "${{ inputs.no_access_instance }}"
           version: "1.0.0"
           autocreate: true
           metadata: '{}'
 
-      - name: "TC-8 Update MicroService, user WITH access (expect success)"
+      - name: "TC-8 Create instance + new System with Resource ID (check skipped) (expect success)"
         id: tc8
         continue-on-error: true
         uses: ./
@@ -138,13 +138,13 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
-          resourceType: "MicroService"
-          resourceName: "E2E-UV-Svc-${{ env.RUN }}"
-          systemInstance: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "1.0.1"
+          resourceType: "Environment Instance"
+          resourceName: "E2E-GOV-New-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "E2E-GOV-NewSys-${{ env.RUN }}", "Environment": "${{ inputs.environment }}", "Resource ID": "APM-GOV-${{ env.RUN }}"}'
 
-      - name: "TC-9 Update MicroService, user WITHOUT access rejected (expect failure)"
+      - name: "TC-9 System Component (identity check only) (expect success)"
         id: tc9
         continue-on-error: true
         uses: ./
@@ -152,69 +152,8 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.no_access_user }}"
-          resourceType: "MicroService"
-          resourceName: "E2E-UV-Svc-${{ env.RUN }}"
-          systemInstance: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "9.9.9"
-
-      - name: "TC-10 Create MicroService, user WITHOUT access rejected (expect failure)"
-        id: tc10
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.no_access_user }}"
-          resourceType: "MicroService"
-          resourceName: "E2E-UV-Svc2-${{ env.RUN }}"
-          systemInstance: "E2E-UV-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{}'
-
-      - name: "TC-11 Create instance + new System with Resource ID (check skipped) (expect success)"
-        id: tc11
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
-          resourceType: "Environment Instance"
-          resourceName: "E2E-UV-New-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{"System": "E2E-UV-NewSys-${{ env.RUN }}", "Environment": "${{ inputs.environment }}", "Resource ID": "APM-UV-${{ env.RUN }}"}'
-
-      - name: "TC-12 System Component, valid user (expect success)"
-        id: tc12
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "${{ inputs.has_access_user }}"
           resourceType: "System Component"
-          resourceName: "E2E-UV-Comp-${{ env.RUN }}"
-          version: "1.0"
-          autocreate: true
-          metadata: '{"Type": "Server"}'
-
-      - name: "TC-13 System Component, unknown user rejected (expect failure)"
-        id: tc13
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          userid: "E2E-NO-SUCH-USER-${{ env.RUN }}"
-          resourceType: "System Component"
-          resourceName: "E2E-UV-Comp2-${{ env.RUN }}"
+          resourceName: "E2E-GOV-Comp-${{ env.RUN }}"
           version: "1.0"
           autocreate: true
           metadata: '{"Type": "Server"}'
@@ -222,7 +161,7 @@ jobs:
       - name: Summarize results
         if: always()
         run: |
-          echo "## E2E Results — User Validation (run ${RUN})" >> "$GITHUB_STEP_SUMMARY"
+          echo "## E2E Results — Governed (run ${RUN}, GitHub user ${GITHUB_TRIGGERING_ACTOR})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Test Case | Expected | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
@@ -231,19 +170,15 @@ jobs:
             if [ "$expected" = "$actual" ]; then mark="✅ PASS"; else mark="❌ FAIL"; overall=1; fi
             echo "| ${label} | ${expected} | ${actual} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
           done <<EOT
-          TC-1 Missing userid rejected|failure|${{ steps.tc1.outcome }}
-          TC-2 Unknown user rejected|failure|${{ steps.tc2.outcome }}
-          TC-3 Create instance, user WITHOUT access rejected|failure|${{ steps.tc3.outcome }}
-          TC-4 Create instance, user WITH access|success|${{ steps.tc4.outcome }}
-          TC-5 Update instance, user WITH access|success|${{ steps.tc5.outcome }}
-          TC-6 Update instance, user WITHOUT access rejected|failure|${{ steps.tc6.outcome }}
-          TC-7 Create MicroService, user WITH access|success|${{ steps.tc7.outcome }}
-          TC-8 Update MicroService, user WITH access|success|${{ steps.tc8.outcome }}
-          TC-9 Update MicroService, user WITHOUT access rejected|failure|${{ steps.tc9.outcome }}
-          TC-10 Create MicroService, user WITHOUT access rejected|failure|${{ steps.tc10.outcome }}
-          TC-11 Create instance + new System with Resource ID (check skipped)|success|${{ steps.tc11.outcome }}
-          TC-12 System Component, valid user|success|${{ steps.tc12.outcome }}
-          TC-13 System Component, unknown user rejected|failure|${{ steps.tc13.outcome }}
+          TC-1 Create instance on a System you can access|success|${{ steps.tc1.outcome }}
+          TC-2 Update that instance|success|${{ steps.tc2.outcome }}
+          TC-3 Create MicroService on that instance|success|${{ steps.tc3.outcome }}
+          TC-4 Update that MicroService|success|${{ steps.tc4.outcome }}
+          TC-5 Create instance on a System you CANNOT access|failure|${{ steps.tc5.outcome }}
+          TC-6 Update an instance you CANNOT access|failure|${{ steps.tc6.outcome }}
+          TC-7 Create MicroService on an instance you CANNOT access|failure|${{ steps.tc7.outcome }}
+          TC-8 Create instance + new System with Resource ID (check skipped)|success|${{ steps.tc8.outcome }}
+          TC-9 System Component (identity check only)|success|${{ steps.tc9.outcome }}
           EOT
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "$overall" -eq 0 ]; then
