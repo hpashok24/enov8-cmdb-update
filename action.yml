@@ -1,5 +1,5 @@
-name: 'Enov8 - User Validated Deployment Update'
-description: 'Update or create Enov8 CMDB resource versions, validating the user exists and has access to the System first.'
+name: 'Enov8 - Governed Deployment Version Update'
+description: 'Update or create Enov8 CMDB resource versions as the GitHub user who ran the workflow, with Enov8 access checks.'
 author: 'Enov8 Ltd'
 
 branding:
@@ -7,10 +7,6 @@ branding:
   color: 'green'
 
 inputs:
-  userid:
-    description: 'REQUIRED. Enov8 User ID the request is made on behalf of. The user must exist in the Enov8 Ecosystem with an active User Status and Login Access set to Yes. For Environment Instance and MicroService (create and update), the user must also be a member of the Assigned To group of the associated System.'
-    required: true
-
   resourceType:
     description: 'Supported values: Environment Instance | System Component | System Interface | MicroService'
     required: true
@@ -47,6 +43,11 @@ inputs:
   enov8_url:
     description: 'Base URL of your Enov8 instance (Example: https://yourcompany.enov8.cloud/ecosystem)'
     required: true
+
+  insecure_skip_tls_verify:
+    description: 'Set to true to skip TLS verification (not recommended)'
+    required: false
+    default: 'false'
 
 outputs:
   result:
