@@ -4,21 +4,6 @@ name: E2E Test Suite (Governed)
 # which must match an Enov8 User ID.
 on:
   workflow_dispatch:
-    inputs:
-      existing_system:
-        description: "Existing System whose Assigned To group YOU are a member of"
-        required: true
-        default: "GDW"
-      environment:
-        description: "Existing Environment name"
-        required: true
-        default: "UAT Env"
-      no_access_system:
-        description: "Existing System whose Assigned To group you are NOT a member of"
-        required: true
-      no_access_instance:
-        description: "Existing System Instance of that no-access System"
-        required: true
 
 jobs:
   e2e-tests:
@@ -27,6 +12,11 @@ jobs:
 
     env:
       RUN: ${{ github.run_id }}
+      # Test data — change here if your tenant uses different records
+      EXISTING_SYSTEM: "GDW"              # a System whose Assigned To group the runner IS in
+      ENVIRONMENT: "UAT Env"
+      NO_ACCESS_SYSTEM: "NovaLink"        # a System whose Assigned To group the runner is NOT in
+      NO_ACCESS_INSTANCE: "NovaLink (DEV)"
 
     steps:
       - name: Checkout code
@@ -47,7 +37,7 @@ jobs:
           resourceName: "E2E-GOV-${{ env.RUN }} (DEV)"
           version: "1.0.0"
           autocreate: true
-          metadata: '{"System": "${{ inputs.existing_system }}", "Environment": "${{ inputs.environment }}"}'
+          metadata: '{"System": "${{ env.EXISTING_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
 
       - name: "TC-2 Update that instance (expect success)"
         id: tc2
@@ -101,7 +91,7 @@ jobs:
           resourceName: "E2E-GOV-NoAccess-${{ env.RUN }} (DEV)"
           version: "1.0.0"
           autocreate: true
-          metadata: '{"System": "${{ inputs.no_access_system }}", "Environment": "${{ inputs.environment }}"}'
+          metadata: '{"System": "${{ env.NO_ACCESS_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
 
       - name: "TC-6 Update an instance you CANNOT access (expect failure)"
         id: tc6
@@ -112,7 +102,7 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
-          resourceName: "${{ inputs.no_access_instance }}"
+          resourceName: "${{ env.NO_ACCESS_INSTANCE }}"
           version: "9.9.9"
 
       - name: "TC-7 Create MicroService on an instance you CANNOT access (expect failure)"
@@ -125,7 +115,7 @@ jobs:
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "MicroService"
           resourceName: "E2E-GOV-Svc2-${{ env.RUN }}"
-          systemInstance: "${{ inputs.no_access_instance }}"
+          systemInstance: "${{ env.NO_ACCESS_INSTANCE }}"
           version: "1.0.0"
           autocreate: true
           metadata: '{}'
@@ -142,7 +132,7 @@ jobs:
           resourceName: "E2E-GOV-New-${{ env.RUN }} (DEV)"
           version: "1.0.0"
           autocreate: true
-          metadata: '{"System": "E2E-GOV-NewSys-${{ env.RUN }}", "Environment": "${{ inputs.environment }}", "Resource ID": "APM-GOV-${{ env.RUN }}"}'
+          metadata: '{"System": "E2E-GOV-NewSys-${{ env.RUN }}", "Environment": "${{ env.ENVIRONMENT }}", "Resource ID": "APM-GOV-${{ env.RUN }}"}'
 
       - name: "TC-9 System Component (identity check only) (expect success)"
         id: tc9
