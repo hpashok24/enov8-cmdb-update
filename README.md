@@ -243,7 +243,7 @@ If `systemInstance` already exists, `metadata` can be `{}`.
             }
 ```
 
-The action creates `NewSystem` (with Resource ID `APM-12345`) and the instance `NewSystem (DEV)`, then links `NewSystem` to the Systems whose Resource IDs are listed. Each entry creates one link in `System_REL_System`:
+The action creates `NewSystem` (with Resource ID `APM-12345`) and the instance `NewSystem (DEV)`, then links `NewSystem` to the Systems whose Resource IDs are listed. 
 
 | Entry | SOURCE_ID | TARGET_ID | Connection Type |
 |---|---|---|---|
