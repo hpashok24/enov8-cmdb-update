@@ -1,6 +1,6 @@
 # Test harness for enov8-Ltd/enov8-update-deployment-version
 #
-# Required repo secrets (Settings > Secrets and variables > Actions):
+# Required secrets, on the "dev" environment (Settings > Environments > dev) or at repo level:
 #   ENOV8_BASE_URL  - e.g. https://<your-enov8-instance>/ecosystem   (no trailing /api)
 #   ENOV8_APP_ID    - Enov8 App ID
 #   ENOV8_APP_KEY   - Enov8 App Key
@@ -21,10 +21,11 @@ permissions:
 jobs:
   update-version:
     runs-on: ubuntu-latest
+    environment: dev
     steps:
       - name: Enov8 - Governed Deployment Version Update
         id: enov8
-        uses: enov8-Ltd/enov8-update-deployment-version@v1.2.0
+        uses: hpashok24/enov8-cmdb-update@angelj
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
