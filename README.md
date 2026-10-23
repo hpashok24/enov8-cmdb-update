@@ -17,6 +17,7 @@ Every change is made **as the GitHub user who ran the workflow**. The action rea
 - **Validation before write** — rejected requests make no changes in Enov8
 - **System lookup by Resource ID** — the System is found by `Resource ID` (e.g. an APM ID) first, then by name
 - Creates missing resources on request, cascading through System Instance and System where needed
+- **System ↔ System links** — records Upstream and Downstream connections between Systems (not instances), each identified by its Resource ID
 
 ## 👤 One-time setup: map GitHub users to Enov8 users
 
@@ -211,6 +212,47 @@ If `systemInstance` already exists, `metadata` can be `{}`.
             }
 ```
 
+### 🔗 Create the resource and its System, with Upstream and Downstream links
+
+```yaml
+      - name: Enov8 - Governed Deployment Version Update
+        uses: enov8-Ltd/enov8-update-deployment-version@v1.3.0
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "NewSystem (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "NewSystem",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True",
+              "Resource ID": "APM-12345",
+              "Upstream": [
+                { "Resource ID": "APM-1001", "ConnectionTechnology": "ESB" }
+              ],
+              "Downstream": [
+                { "Resource ID": "APM-2002", "ConnectionTechnology": "ESB" },
+                { "Resource ID": "APM-3003", "ConnectionTechnology": "FTP" }
+              ]
+            }
+```
+
+The action creates `NewSystem` (with Resource ID `APM-12345`) and the instance `NewSystem (DEV)`, then links `NewSystem` to the Systems whose Resource IDs are listed. Each entry creates one link in `System_REL_System`:
+
+| Entry | SOURCE_ID | TARGET_ID | Connection Type |
+|---|---|---|---|
+| Upstream `APM-1001` | NewSystem | System with Resource ID `APM-1001` | ESB |
+| Downstream `APM-2002` | System with Resource ID `APM-2002` | NewSystem | ESB |
+| Downstream `APM-3003` | System with Resource ID `APM-3003` | NewSystem | FTP |
+
+The same `Upstream` / `Downstream` lists also work when the System already exists, and on a plain version update: the links are added to the instance's System, and links that already exist are skipped.
+
 ## 🔍 Example Output
 
 ```text
@@ -241,6 +283,27 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 | `Core` | `False` | Used only if `System` is being created. |
 
 `Assigned To` and `Organisation` are always resolved automatically and should not be included in `metadata`.
+
+### System links: `Upstream` and `Downstream`
+
+These keys link **Systems to Systems** (stored in `System_REL_System`). They never link instances or MicroServices.
+
+The System being linked is the System of the request: the `System` / `Resource ID` in `metadata` when it is created, or the System of the instance (or of the MicroService's `systemInstance`) when it already exists. That is why the keys can be sent with `resourceType` `Environment Instance` or `MicroService`, the request types that belong to a System. They are read on **both create and update**.
+
+Each entry in the lists names the **other System** by its Resource ID:
+
+| Key | Required | Notes |
+|---|---|---|
+| `Resource ID` | ✅ | Resource ID (e.g. APM ID) of the other System. Looked up with `GET /api/System`; it must already exist. |
+| `ConnectionTechnology` | ✅ | Sent as the link's `Connection Type`. Must be a value configured in Enov8 (e.g. `ESB`, `FTP`, `WebService`, `BatchService`). |
+
+How links are handled:
+
+- Every entry is checked, and every Resource ID resolved, **before** anything is written. A missing `Resource ID` or `ConnectionTechnology`, or a Resource ID that doesn't exist, rejects the whole request.
+- Links are created after the version update or create. If Enov8 rejects a `Connection Type`, the run fails at that link; the log shows which links were already created.
+- A link that already exists (same SOURCE and TARGET) is skipped and left unchanged.
+- A System cannot be linked to itself.
+- Access is checked for this System only (its Assigned To group), not for the linked Systems.
 
 ### `System Component`
 
@@ -278,6 +341,13 @@ If `systemInstance` already exists, `metadata` can be `{}`.
 
 - Verify `autocreate` is `true`
 - Verify `System`, `Environment` and `Business Unit` names match Enov8 exactly
+
+**❌ Upstream / Downstream link rejected**
+
+- `"Resource ID" is required` or `"ConnectionTechnology" is required`: every entry needs both keys
+- `no System found with Resource ID "…"`: check the linked System's Resource ID in Enov8
+- `Failed to link …`: Enov8 rejected the link, most often because the Connection Type isn't a configured value
+- `only supported for Environment Instance and MicroService`: links can't be sent with System Component or System Interface
 
 **❌ Authentication failed**
 
