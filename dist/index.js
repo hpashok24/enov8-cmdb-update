@@ -3,12 +3,8 @@ const http = require('http');
 const { URL } = require('url');
 const fs = require('fs');
 
-// ✅ The GitHub username must equal the Enov8 User ID.
-const GITHUB_USERNAME_FIELD = 'User ID';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// Set once per run from insecure_skip_tls_verify and applied to every request.
+let tlsOptions = {};
 
 function getInput(name, required = false) {
   const v = process.env[`INPUT_${name.toUpperCase()}`] || '';
@@ -20,20 +16,62 @@ function getInput(name, required = false) {
   return v.trim();
 }
 
+// Enov8 only accepts the strings "True"/"False" — also accept JSON booleans and any-case strings.
+function normalizeBool(value, defaultValue, fieldName) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'True' : 'False';
+  }
+
+  const s = String(value).trim().toLowerCase();
+
+  if (s === 'true') return 'True';
+  if (s === 'false') return 'False';
+
+  throw new Error(`metadata.${fieldName} must be true or false, got: ${JSON.stringify(value)}`);
+}
+
+// Parses metadata and trims leading/trailing whitespace from every key and string value.
+function parseMetadata(raw) {
+  let parsed;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`Invalid metadata JSON: ${e.message}`);
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('metadata must be a JSON object, e.g. {"System": "GDW"}');
+  }
+
+  const out = {};
+
+  for (const [k, v] of Object.entries(parsed)) {
+    out[k.trim()] = typeof v === 'string' ? v.trim() : v;
+  }
+
+  return out;
+}
+
 function request(method, urlStr, payload, headers) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
-    const lib = url.protocol === 'http:' ? http : https;
+    const isHttp = url.protocol === 'http:';
 
     const options = {
       method,
       hostname: url.hostname,
-      port: url.port || undefined,
+      port: url.port ? Number(url.port) : (isHttp ? 80 : 443),
       path: url.pathname + url.search,
-      headers
+      headers,
+      ...(isHttp ? {} : tlsOptions)
     };
 
-    const req = lib.request(options, (res) => {
+    const req = (isHttp ? http : https).request(options, (res) => {
       let data = '';
 
       res.on('data', (d) => data += d);
@@ -63,18 +101,51 @@ function request(method, urlStr, payload, headers) {
   });
 }
 
+// ✅ Name -> ECO ID lookup by endpoint, returns null (not throw) when nothing matches
+async function tryResolveByName(baseUrl, headers, endpoint, nameField, name) {
+  const url = `${baseUrl}/api/${endpoint}?${encodeURIComponent(nameField)}=${encodeURIComponent(name)}`;
+  const res = await request('GET', url, undefined, headers);
+
+  const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
+  const match = records.find(r => r[nameField] === name) || records[0];
+
+  return (match && match['System ID']) || null;
+}
+
+async function resolveByName(baseUrl, headers, endpoint, nameField, name) {
+  const id = await tryResolveByName(baseUrl, headers, endpoint, nameField, name);
+
+  if (!id) {
+    throw new Error(`Could not resolve "${name}" via ${endpoint} lookup`);
+  }
+
+  return id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Governed updates: identity, user validation and System access
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ✅ The GitHub username must equal the Enov8 User ID.
+// Fixed in code on purpose: it is NOT a workflow input, so a workflow author cannot change how identity is mapped.
+const GITHUB_USERNAME_FIELD = 'User ID';
+
 function sameText(a, b) {
   return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 }
 
 function toRecords(parsed) {
   if (Array.isArray(parsed)) return parsed;
-  if (parsed && typeof parsed === 'object' && !('success' in parsed && parsed.success === false)) return [parsed];
+  if (parsed && typeof parsed === 'object' && !(parsed.success === false)) return [parsed];
   return [];
 }
 
-// ✅ Exact-match lookup: returns the full record whose field equals value, or null.
-// Never falls back to "the first record" — a wrong match must never pass validation.
+// "A;B;C" -> ["A","B","C"]
+function splitList(value) {
+  return String(value ?? '').split(';').map(s => s.trim()).filter(Boolean);
+}
+
+// ✅ Exact-match lookup: the full record whose field equals value, or null. Never "the first record".
 async function findRecord(baseUrl, headers, endpoint, field, value) {
   if (!value) return null;
 
@@ -83,25 +154,6 @@ async function findRecord(baseUrl, headers, endpoint, field, value) {
 
   return toRecords(res.parsed).find(r => sameText(r[field], value)) || null;
 }
-
-async function resolveByName(baseUrl, headers, endpoint, field, value) {
-  const record = await findRecord(baseUrl, headers, endpoint, field, value);
-
-  if (!record || !record['System ID']) {
-    throw new Error(`Could not resolve "${value}" via ${endpoint} lookup`);
-  }
-
-  return record['System ID'];
-}
-
-// "A;B;C" -> ["A","B","C"]
-function splitList(value) {
-  return String(value ?? '').split(';').map(s => s.trim()).filter(Boolean);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// User validation & access control
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ✅ Identity comes from GitHub, never from the workflow file.
 // GITHUB_TRIGGERING_ACTOR / GITHUB_ACTOR are set by the GitHub runner and cannot be overwritten by a workflow.
@@ -119,7 +171,7 @@ function getGitHubActor() {
   return actor;
 }
 
-// ✅ Map the GitHub user to exactly one Enov8 user, then check that user is active
+// ✅ Map the GitHub user to an Enov8 user, then check that user is active
 async function resolveEnov8User(baseUrl, headers, githubUser) {
   console.log(`🔐 GitHub user "${githubUser}" — looking up the mapped Enov8 user (${GITHUB_USERNAME_FIELD})`);
 
@@ -169,7 +221,7 @@ async function resolveEnov8User(baseUrl, headers, githubUser) {
   return userId;
 }
 
-// ✅ Find a System: by Resource ID (APM ID) first, then by ECO ID or name
+// ✅ Find a System: by Resource ID (APM ID) first, then by ECO ID or name — exact matches only
 async function findSystem(baseUrl, headers, { systemRef, resourceId }) {
   if (resourceId) {
     const byResourceId = await findRecord(baseUrl, headers, 'System', 'Resource ID', resourceId);
@@ -190,6 +242,7 @@ async function findSystem(baseUrl, headers, { systemRef, resourceId }) {
   return findRecord(baseUrl, headers, 'System', 'Resource Name', systemRef);
 }
 
+// "AD0004 - Ashley Hosking" -> "AD0004"
 function groupUserIds(groupUsers) {
   return splitList(groupUsers).map(entry => entry.split(' - ')[0].trim());
 }
@@ -228,7 +281,6 @@ async function validateSystemAccess(baseUrl, headers, userId, system) {
 }
 
 // ✅ Works out which System a System Instance / MicroService request touches, before anything is written.
-// Returns { system } when it exists, or { system: null, reason } when there is nothing to check yet.
 async function resolveAssociatedSystem(baseUrl, headers, { resourceType, resourceName, systemInstance, metadata }) {
   const instanceName = resourceType === 'MicroService' ? systemInstance : resourceName;
   const instance = await findRecord(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
@@ -241,144 +293,25 @@ async function resolveAssociatedSystem(baseUrl, headers, { resourceType, resourc
       throw new Error(`❌ Could not find the System linked to System Instance "${instanceName}" (${instance['System'] || 'none'}) — cannot validate access`);
     }
 
-    return { system, instanceExists: true };
+    return { system };
   }
 
   // Instance does not exist yet — it will be created from metadata
   const system = await findSystem(baseUrl, headers, {
-    systemRef: metadata && metadata['System'],
-    resourceId: metadata && metadata['Resource ID']
-  });
-
-  if (system) {
-    return { system, instanceExists: false };
-  }
-
-  return {
-    system: null,
-    instanceExists: false,
-    reason: (metadata && (metadata['System'] || metadata['Resource ID']))
-      ? `System "${metadata['System'] || metadata['Resource ID']}" does not exist yet and will be created by this run`
-      : 'no System is linked to this request'
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Create helpers (cascade)
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function resolveOrganisationId(baseUrl, headers) {
-  const res = await request('GET', `${baseUrl}/api/Organisation`, undefined, headers);
-  const org = Array.isArray(res.parsed) ? res.parsed[0] : res.parsed;
-
-  if (!org || !org['System ID']) {
-    throw new Error('Could not resolve Organisation via /api/Organisation lookup');
-  }
-
-  return org['System ID'];
-}
-
-async function resolveAssignedToId(baseUrl, headers) {
-  const res = await request('GET', `${baseUrl}/api/Group`, undefined, headers);
-  const match = toRecords(res.parsed).find(r => r['Env Management'] === true);
-
-  if (!match || !match['System ID']) {
-    throw new Error('Could not resolve Assigned To — no Group found with "Env Management": true');
-  }
-
-  return match['System ID'];
-}
-
-async function postAndCheck(url, payloadObj, headers, label) {
-  const payload = JSON.stringify(payloadObj);
-
-  console.log(`📡 POST ${url}`);
-  console.log(`📦 Payload:\n${payload}`);
-
-  const res = await request('POST', url, payload, {
-    ...headers,
-    'Content-Length': Buffer.byteLength(payload)
-  });
-
-  console.log(`📨 Response:\n${res.body}`);
-
-  const created = res.parsed
-    && Array.isArray(res.parsed.result)
-    && res.parsed.result.find(r => r.success === true);
-
-  if (!created) {
-    throw new Error(`❌ Failed to create ${label}: ${res.body}`);
-  }
-
-  return { res, created };
-}
-
-// ✅ Uses the existing System (found by Resource ID, then name) or creates it
-async function resolveOrCreateSystem(baseUrl, headers, metadata, status, assignedToId, organisationId) {
-  const existing = await findSystem(baseUrl, headers, {
     systemRef: metadata['System'],
     resourceId: metadata['Resource ID']
   });
 
-  if (existing) {
-    return existing['System ID'];
+  if (system) {
+    return { system };
   }
 
-  const systemName = metadata['System'];
-
-  if (!systemName) {
-    throw new Error(`metadata.System is required to create a new System (no System found with Resource ID "${metadata['Resource ID']}")`);
-  }
-
-  console.log(`⚠️ System "${systemName}" not found — creating it`);
-
-  const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', metadata['Business Unit'] || 'Other');
-
-  const { created } = await postAndCheck(`${baseUrl}/api/System`, {
-    'Resource Name': systemName,
-    'Resource ID': metadata['Resource ID'],
-    'Status': status,
-    'Business Unit': businessUnitId,
-    'Assigned To': assignedToId,
-    'Organisation': organisationId,
-    'Type': metadata['Type'] || 'Other',
-    'Core': metadata['Core'] || 'False'
-  }, headers, `System "${systemName}"`);
-
-  console.log(`✅ Created System "${systemName}" (${created['System ID']})`);
-
-  return created['System ID'];
-}
-
-async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, metadata, status, assignedToId, organisationId) {
-  const existing = await findRecord(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
-
-  if (existing) {
-    return instanceName;
-  }
-
-  console.log(`⚠️ System Instance "${instanceName}" not found — creating it`);
-
-  const payloadObj = {
-    'Resource Name': instanceName,
-    'Status': status,
-    'Assigned To': assignedToId,
-    'Organisation': organisationId
+  return {
+    system: null,
+    reason: (metadata['System'] || metadata['Resource ID'])
+      ? `System "${metadata['System'] || metadata['Resource ID']}" does not exist yet and will be created by this run`
+      : 'no System is linked to this request'
   };
-
-  if (metadata['Environment']) {
-    payloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
-  }
-
-  if (metadata['System'] || metadata['Resource ID']) {
-    payloadObj['System'] = await resolveOrCreateSystem(baseUrl, headers, metadata, status, assignedToId, organisationId);
-  }
-
-  await postAndCheck(`${baseUrl}/api/SystemInstance`, payloadObj, headers, `System Instance "${instanceName}"`);
-
-  console.log(`✅ Created System Instance "${instanceName}"`);
-
-  return instanceName;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -431,14 +364,7 @@ async function planSystemLinks(baseUrl, headers, metadata, mainSystemId) {
 
       console.log(`🔎 ${label}: Resource ID "${resourceId}" → System "${linked['Resource Name']}" (${linked['System ID']})`);
 
-      plan.push({
-        direction,
-        label,
-        resourceId,
-        connectionType,
-        linkedId: linked['System ID'],
-        linkedName: linked['Resource Name']
-      });
+      plan.push({ direction, label, resourceId, connectionType, linkedId: linked['System ID'], linkedName: linked['Resource Name'] });
     }
   }
 
@@ -453,10 +379,6 @@ async function applySystemLinks(baseUrl, headers, plan, mainSystemId, mainSystem
   const done = new Set();
 
   for (const link of plan) {
-    if (link.linkedId === mainSystemId) {
-      throw new Error(`❌ ${link.label} (${link.resourceId}): a System cannot be linked to itself ("${mainSystemName}")`);
-    }
-
     const sourceId = link.direction === 'Upstream' ? mainSystemId : link.linkedId;
     const targetId = link.direction === 'Upstream' ? link.linkedId : mainSystemId;
     const sourceName = link.direction === 'Upstream' ? mainSystemName : link.linkedName;
@@ -479,19 +401,12 @@ async function applySystemLinks(baseUrl, headers, plan, mainSystemId, mainSystem
       continue;
     }
 
-    const payload = JSON.stringify({
-      'SOURCE_ID': sourceId,
-      'TARGET_ID': targetId,
-      'Connection Type': link.connectionType
-    });
+    const payload = JSON.stringify({ 'SOURCE_ID': sourceId, 'TARGET_ID': targetId, 'Connection Type': link.connectionType });
 
     console.log(`📡 POST ${relUrl}`);
     console.log(`📦 Payload:\n${payload}`);
 
-    const res = await request('POST', relUrl, payload, {
-      ...headers,
-      'Content-Length': Buffer.byteLength(payload)
-    });
+    const res = await request('POST', relUrl, payload, { ...headers, 'Content-Length': Buffer.byteLength(payload) });
 
     console.log(`📨 Response:\n${res.body}`);
 
@@ -506,35 +421,263 @@ async function applySystemLinks(baseUrl, headers, plan, mainSystemId, mainSystem
   }
 }
 
-function writeOutput(res) {
+// ✅ Organisation is a single fixed record per tenant — no name needed
+async function resolveOrganisationId(baseUrl, headers) {
+  const url = `${baseUrl}/api/Organisation`;
+  const res = await request('GET', url, undefined, headers);
+
+  const org = Array.isArray(res.parsed) ? res.parsed[0] : res.parsed;
+
+  if (!org || !org['System ID']) {
+    throw new Error('Could not resolve Organisation via /api/Organisation lookup');
+  }
+
+  return org['System ID'];
+}
+
+// ✅ "Assigned To" is always the Group flagged for environment management — never supplied by name
+async function resolveAssignedToId(baseUrl, headers) {
+  const url = `${baseUrl}/api/Group`;
+  const res = await request('GET', url, undefined, headers);
+
+  const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
+  const match = records.find(r => r['Env Management'] === true);
+
+  if (!match || !match['System ID']) {
+    throw new Error('Could not resolve Assigned To — no Group found with "Env Management": true');
+  }
+
+  return match['System ID'];
+}
+
+// ✅ Creates the System if it doesn't already exist (cascade from a System Instance create)
+async function resolveOrCreateSystem(baseUrl, headers, systemName, businessUnitName, status, assignedToId, organisationId, systemType, systemCore, resourceId) {
+  // ✅ Same exact lookup as the access check (Resource ID first, then name), so the System that was
+  // checked is always the System that is used
+  const existing = await findSystem(baseUrl, headers, { systemRef: systemName, resourceId });
+
+  if (existing) {
+    return existing['System ID'];
+  }
+
+  if (!systemName) {
+    throw new Error(`metadata.System is required to create a new System (no System found with Resource ID "${resourceId}")`);
+  }
+
+  console.log(`⚠️ System "${systemName}" not found — creating it`);
+
+  const core = normalizeBool(systemCore, 'False', 'Core');
+
+  const businessUnitId = await resolveByName(baseUrl, headers, 'BusinessUnit', 'BusinessUnit Name', businessUnitName || 'Other');
+
+  const payload = JSON.stringify({
+    'Resource Name': systemName,
+    'Resource ID': resourceId,
+    'Status': status,
+    'Business Unit': businessUnitId,
+    'Assigned To': assignedToId,
+    'Organisation': organisationId,
+    'Type': systemType || 'Other',
+    'Core': core
+  });
+
+  const systemUrl = `${baseUrl}/api/System`;
+
+  console.log(`📡 POST ${systemUrl}`);
+  console.log(`📦 Payload:\n${payload}`);
+
+  const res = await request('POST', systemUrl, payload, {
+    ...headers,
+    'Content-Length': Buffer.byteLength(payload)
+  });
+
+  console.log(`📨 Response:\n${res.body}`);
+
+  const created = res.parsed
+    && Array.isArray(res.parsed.result)
+    && res.parsed.result.find(r => r.success === true);
+
+  if (!created) {
+    // A parallel run may have created it between our lookup and our POST — reuse it instead of failing.
+    const raced = await tryResolveByName(baseUrl, headers, 'System', 'Resource Name', systemName);
+
+    if (raced) {
+      console.log(`⚠️ System "${systemName}" was created by another run in the meantime — reusing it (${raced})`);
+      return raced;
+    }
+
+    throw new Error(`❌ Failed to create System "${systemName}": ${res.body}`);
+  }
+
+  console.log(`✅ Created System "${systemName}" (${created['System ID']})`);
+
+  return created['System ID'];
+}
+
+// ✅ Creates the System Instance if it doesn't already exist (cascade from a MicroService create).
+// Returns the instance's name, not its ECO ID — Enov8 resolves SystemInstance by name on MicroService create.
+async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, metadata, status, assignedToId, organisationId) {
+  const existingId = await tryResolveByName(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
+
+  if (existingId) {
+    return instanceName;
+  }
+
+  console.log(`⚠️ System Instance "${instanceName}" not found — creating it`);
+
+  const payloadObj = {
+    'Resource Name': instanceName,
+    'Status': status,
+    'Assigned To': assignedToId,
+    'Organisation': organisationId
+  };
+
+  if (metadata['Environment']) {
+    payloadObj['Environment'] = await resolveByName(baseUrl, headers, 'Environment', 'Resource Name', metadata['Environment']);
+  }
+
+  if (metadata['System'] || metadata['Resource ID']) {
+    payloadObj['System'] = await resolveOrCreateSystem(
+      baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
+      metadata['Type'], metadata['Core'],  metadata['Resource ID']
+    );
+  }
+
+  const payload = JSON.stringify(payloadObj);
+  const instanceUrl = `${baseUrl}/api/SystemInstance`;
+
+  console.log(`📡 POST ${instanceUrl}`);
+  console.log(`📦 Payload:\n${payload}`);
+
+  const res = await request('POST', instanceUrl, payload, {
+    ...headers,
+    'Content-Length': Buffer.byteLength(payload)
+  });
+
+  console.log(`📨 Response:\n${res.body}`);
+
+  const created = res.parsed
+    && Array.isArray(res.parsed.result)
+    && res.parsed.result.some(r => r.success === true);
+
+  if (!created) {
+    const raced = await tryResolveByName(baseUrl, headers, 'SystemInstance', 'Resource Name', instanceName);
+
+    if (raced) {
+      console.log(`⚠️ System Instance "${instanceName}" was created by another run in the meantime — reusing it`);
+      return instanceName;
+    }
+
+    throw new Error(`❌ Failed to create System Instance "${instanceName}": ${res.body}`);
+  }
+
+  console.log(`✅ Created System Instance "${instanceName}"`);
+
+  return instanceName;
+}
+
+// The Version the resource holds right now ('' if it doesn't exist or has none).
+// Read-only and best effort: a failed lookup never fails the run.
+async function getCurrentVersion(url, headers, resourceType, resourceName, systemInstance) {
+  const isMicro = resourceType === 'MicroService';
+  const nameField = isMicro ? 'MicroService Name' : 'Resource Name';
+  const norm = (s) => String(s === undefined || s === null ? '' : s).trim().toLowerCase();
+
+  let query = `${encodeURIComponent(nameField)}=${encodeURIComponent(resourceName)}`;
+
+  if (isMicro) {
+    query += `&SystemInstance=${encodeURIComponent(systemInstance)}`;
+  }
+
+  try {
+    const res = await request('GET', `${url}?${query}`, undefined, headers);
+    const records = Array.isArray(res.parsed) ? res.parsed : (res.parsed ? [res.parsed] : []);
+
+    // A MicroService name is only unique within its System Instance, so match both.
+    const match = records.find(r => norm(r[nameField]) === norm(resourceName)
+      && (!isMicro || norm(r['SystemInstance']) === norm(systemInstance)));
+
+    const v = match ? match['Version'] : '';
+
+    return v === null || v === undefined ? '' : String(v);
+  } catch (e) {
+    console.log(`⚠️ Could not read the previous version: ${e.message}`);
+    return '';
+  }
+}
+
+// The record's ECO ID: on create/update it's in result[], on a no-op update only in "value passed".
+function extractResourceId(parsed) {
+  if (!parsed || typeof parsed !== 'object') return '';
+
+  const fromResult = Array.isArray(parsed.result) ? parsed.result.find(r => r && r['System ID']) : null;
+
+  if (fromResult) return fromResult['System ID'];
+
+  const passed = Array.isArray(parsed['value passed']) ? parsed['value passed'][0] : null;
+
+  return (passed && passed['System ID']) || '';
+}
+
+// Output values must stay on one line, or a stray newline could inject extra outputs.
+const oneLine = (v) => String(v === undefined || v === null ? '' : v).replace(/[\r\n]+/g, ' ');
+
+function writeOutput(res, created, previousVersion) {
   if (!process.env.GITHUB_OUTPUT) return;
 
   fs.appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `result=${JSON.stringify(res.parsed || res.body)}\n`
+    `result=${JSON.stringify(res.parsed || res.body)}\n` +
+    `created=${created ? 'true' : 'false'}\n` +
+    `resource-id=${oneLine(extractResourceId(res.parsed))}\n` +
+    `previous-version=${oneLine(previousVersion)}\n`
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main
-// ─────────────────────────────────────────────────────────────────────────────
-
 async function run() {
   try {
+
     const baseUrl = getInput('enov8_url', true).replace(/\/+$/, '');
+
+    let parsedBaseUrl;
+
+    try {
+      parsedBaseUrl = new URL(baseUrl);
+    } catch {
+      throw new Error('enov8_url is not a valid URL — expected https://<host>[:port]/ecosystem');
+    }
+
+    if (parsedBaseUrl.protocol !== 'https:' && parsedBaseUrl.protocol !== 'http:') {
+      throw new Error('enov8_url must start with https:// (or http:// on a trusted internal network)');
+    }
+
+    if (parsedBaseUrl.protocol === 'http:') {
+      console.warn('⚠️ enov8_url uses plain http:// — the App ID and App Key are sent unencrypted. Use this only on a trusted internal network.');
+    }
+
+    if (getInput('insecure_skip_tls_verify').toLowerCase() === 'true') {
+      tlsOptions = { rejectUnauthorized: false };
+      console.warn('⚠️ insecure_skip_tls_verify is enabled — TLS certificate verification is DISABLED. Only use this for on-prem Enov8 instances with self-signed certificates.');
+    }
+
+    const resourceName = getInput('resourceName', true);
+    const resourceType = getInput('resourceType', true);
+
+    const version = getInput('version', true);
+
     const appId = getInput('app_id', true);
     const appKey = getInput('app_key', true);
 
-    // ✅ Identity is taken from GitHub automatically — there is no userid input to type
-    const githubUser = getGitHubActor();
-
-    const resourceType = getInput('resourceType', true);
-    const resourceName = getInput('resourceName', true);
-    const version = getInput('version', true);
+    // ✅ Required only for MicroService
     const systemInstance = getInput('systemInstance');
+
+    // ✅ Used to create the resource when it doesn't exist yet, and read up front for the access check and System links
     const metadataRaw = getInput('metadata');
+
+    // ✅ Gate for the create fallback — a not-found resource is only ever created when this is 'true'
     const autocreate = getInput('autocreate').toLowerCase() === 'true';
 
+    // ✅ Endpoint mappings
     const endpointMap = {
       'Environment Instance': 'SystemInstance',
       'System Component': 'SystemComponent',
@@ -548,19 +691,12 @@ async function run() {
       throw new Error(`Invalid resourceType: ${resourceType}`);
     }
 
+    // ✅ Validation for MicroService
     if (resourceType === 'MicroService' && !systemInstance) {
       throw new Error('systemInstance is required when resourceType is MicroService');
     }
 
-    let metadata = {};
-
-    if (metadataRaw) {
-      try {
-        metadata = JSON.parse(metadataRaw);
-      } catch (e) {
-        throw new Error(`Invalid metadata JSON: ${e.message}`);
-      }
-    }
+    const url = `${baseUrl}/api/${apiPath}`;
 
     const headers = {
       'Content-Type': 'text/plain',
@@ -569,15 +705,19 @@ async function run() {
       'app-key': appKey
     };
 
-    // ✅ 1. GitHub user must map to an active Enov8 user (all resource types)
+    // ✅ Metadata is parsed up front: the access check and System links need it before any write
+    const metadataEarly = metadataRaw ? parseMetadata(metadataRaw) : {};
+
+    // ✅ Governed 1: identity comes from GitHub and must map to an active Enov8 user (all resource types)
+    const githubUser = getGitHubActor();
     const userId = await resolveEnov8User(baseUrl, headers, githubUser);
 
-    // ✅ 2. System access check (System Instance and MicroService, create and update) — before any write
+    // ✅ Governed 2: System access (System Instance and MicroService, create and update) — before any write
     let associatedSystem = null;
 
     if (resourceType === 'Environment Instance' || resourceType === 'MicroService') {
       const { system, reason } = await resolveAssociatedSystem(baseUrl, headers, {
-        resourceType, resourceName, systemInstance, metadata
+        resourceType, resourceName, systemInstance, metadata: metadataEarly
       });
 
       associatedSystem = system;
@@ -589,8 +729,8 @@ async function run() {
       }
     }
 
-    // ✅ 2b. System ↔ System links — validated and resolved before any write
-    const wantsLinks = metadata['Upstream'] !== undefined || metadata['Downstream'] !== undefined;
+    // ✅ System ↔ System links — validated and resolved before any write
+    const wantsLinks = metadataEarly['Upstream'] !== undefined || metadataEarly['Downstream'] !== undefined;
     let linkPlan = [];
 
     if (wantsLinks) {
@@ -598,11 +738,11 @@ async function run() {
         throw new Error(`❌ Upstream / Downstream links are only supported for Environment Instance and MicroService (got "${resourceType}")`);
       }
 
-      if (!associatedSystem && !metadata['System'] && !metadata['Resource ID']) {
+      if (!associatedSystem && !metadataEarly['System'] && !metadataEarly['Resource ID']) {
         throw new Error('❌ Upstream / Downstream links need a System: set metadata.System or metadata.Resource ID');
       }
 
-      linkPlan = await planSystemLinks(baseUrl, headers, metadata, associatedSystem && associatedSystem['System ID']);
+      linkPlan = await planSystemLinks(baseUrl, headers, metadataEarly, associatedSystem && associatedSystem['System ID']);
     }
 
     // Links are attached to the associated System; a System created by this run is looked up after the create
@@ -610,8 +750,8 @@ async function run() {
       if (linkPlan.length === 0) return;
 
       const main = associatedSystem || await findSystem(baseUrl, headers, {
-        systemRef: metadata['System'],
-        resourceId: metadata['Resource ID']
+        systemRef: metadataEarly['System'],
+        resourceId: metadataEarly['Resource ID']
       });
 
       if (!main || !main['System ID']) {
@@ -621,8 +761,12 @@ async function run() {
       await applySystemLinks(baseUrl, headers, linkPlan, main['System ID'], main['Resource Name']);
     };
 
-    // ✅ 3. Update (unchanged behaviour)
-    const url = `${baseUrl}/api/${apiPath}`;
+    // ✅ Remember what the resource holds now, so later steps can see what this run replaced
+    const previousVersion = await getCurrentVersion(url, headers, resourceType, resourceName, systemInstance);
+
+    console.log(`ℹ️ Current version in Enov8: ${previousVersion || '(none)'}`);
+
+    // ✅ Try update first
     const updatePayloadObj = {};
 
     if (resourceType === 'MicroService') {
@@ -632,7 +776,9 @@ async function run() {
       updatePayloadObj['Resource Name'] = resourceName;
     }
 
-    updatePayloadObj['Version'] = version;
+    if (version) {
+      updatePayloadObj['Version'] = version;
+    }
 
     const updatePayload = JSON.stringify(updatePayloadObj);
 
@@ -649,18 +795,18 @@ async function run() {
     if (updateRes.parsed && updateRes.parsed.total_updated > 0) {
       console.log('✅ Enov8 CMDB updated successfully');
       await linkSystems();
-      writeOutput(updateRes);
+      writeOutput(updateRes, false, previousVersion);
       return;
     }
 
     if (updateRes.parsed && updateRes.parsed.success === true) {
       console.log('⚠️ No update applied (already up-to-date or invalid field)');
       await linkSystems();
-      writeOutput(updateRes);
+      writeOutput(updateRes, false, previousVersion);
       return;
     }
 
-    // ✅ 4. Create (only when autocreate is enabled)
+    // ✅ Update didn't match an existing resource — only create when autocreate is enabled
     if (!autocreate) {
       throw new Error(`❌ API Error: ${updateRes.body}`);
     }
@@ -671,13 +817,18 @@ async function run() {
 
     console.log(`⚠️ No existing "${resourceName}" found — attempting to create it using metadata`);
 
+    const metadata = parseMetadata(metadataRaw);
+
     const status = metadata['Status'] || 'InOperation';
+
     const organisationId = await resolveOrganisationId(baseUrl, headers);
     const assignedToId = await resolveAssignedToId(baseUrl, headers);
 
     let createPayloadObj;
 
     if (resourceType === 'MicroService') {
+      // ✅ MicroService needs no Assigned To/Organisation of its own — just a valid SystemInstance name,
+      // cascade-created (System Instance -> System) via the same metadata used elsewhere.
       const resolvedInstanceName = await resolveOrCreateSystemInstance(
         baseUrl, headers, systemInstance, metadata, status, assignedToId, organisationId
       );
@@ -688,6 +839,8 @@ async function run() {
         'SystemInstance': resolvedInstanceName
       };
     } else if (resourceType === 'System Component') {
+      // ✅ No System/Environment dependency at all — just its own Type (a separate, tenant-specific
+      // ComponentType picklist — no safe default, so it's required) and Monitored flag.
       const componentType = metadata['Type'];
 
       if (!componentType) {
@@ -698,7 +851,7 @@ async function run() {
         'Resource Name': resourceName,
         'Status': status,
         'Type': componentType,
-        'Monitored': metadata['Monitored'] || 'False',
+        'Monitored': normalizeBool(metadata['Monitored'], 'False', 'Monitored'),
         'Assigned To': assignedToId,
         'Organisation': organisationId
       };
@@ -715,21 +868,46 @@ async function run() {
       }
 
       if (metadata['System'] || metadata['Resource ID']) {
-        createPayloadObj['System'] = await resolveOrCreateSystem(baseUrl, headers, metadata, status, assignedToId, organisationId);
+        createPayloadObj['System'] = await resolveOrCreateSystem(
+          baseUrl, headers, metadata['System'], metadata['Business Unit'], status, assignedToId, organisationId,
+          metadata['Type'], metadata['Core'], metadata['Resource ID']
+        );
       }
     }
 
-    createPayloadObj['Version'] = version;
+    if (version) {
+      createPayloadObj['Version'] = version;
+    }
 
-    const { res: createRes } = await postAndCheck(url, createPayloadObj, headers, `"${resourceName}"`);
+    const createPayload = JSON.stringify(createPayloadObj);
+
+    console.log(`📡 POST ${url}`);
+    console.log(`📦 Payload:\n${createPayload}`);
+
+    const createRes = await request('POST', url, createPayload, {
+      ...headers,
+      'Content-Length': Buffer.byteLength(createPayload)
+    });
+
+    console.log(`📨 Response:\n${createRes.body}`);
+
+    const created = createRes.parsed
+      && Array.isArray(createRes.parsed.result)
+      && createRes.parsed.result.some(r => r.success === true);
+
+    if (!created) {
+      throw new Error(`❌ API Error: ${createRes.body}`);
+    }
 
     console.log('✅ Enov8 CMDB resource created successfully');
     await linkSystems();
-    writeOutput(createRes);
+    writeOutput(createRes, true, '');
 
   } catch (err) {
+
     console.error(err.message);
     process.exit(1);
+
   }
 }
 
