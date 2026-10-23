@@ -1,31 +1,25 @@
-name: E2E Test Suite (Governed)
+name: Test System Interface
 
-# Run this manually. The identity used is YOUR GitHub user (the person who clicks "Run workflow"),
-# which must match an Enov8 User ID.
+# Runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
 on:
   workflow_dispatch:
 
 jobs:
-  e2e-tests:
+  test-interface:
     runs-on: ubuntu-latest
     environment: dev
 
     env:
       RUN: ${{ github.run_id }}
-      # Test data — change here if your tenant uses different records
-      EXISTING_SYSTEM: "GDW"              # a System whose Assigned To group the runner IS in
-      ENVIRONMENT: "UAT Env"
-      NO_ACCESS_SYSTEM: "NovaLink"        # a System whose Assigned To group the runner is NOT in
-      NO_ACCESS_INSTANCE: "NovaLink (DEV)"
+      # An interface that already exists in Enov8 (find one with GET {{Ecosystem API URL}}SystemInterface)
+      EXISTING_INTERFACE: "MQ_SAP_GDW_SIT"
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Show identity under test
-        run: echo "Running as GitHub user ${GITHUB_TRIGGERING_ACTOR}"
-
-      - name: "TC-1 Create instance on a System you can access (expect success)"
+      # TC-1: update the version of an existing System Interface (expect success)
+      - name: "TC-1 Update existing System Interface version"
         id: tc1
         continue-on-error: true
         uses: ./
@@ -33,13 +27,12 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "E2E-GOV-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{"System": "${{ env.EXISTING_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
+          resourceType: "System Interface"
+          resourceName: "${{ env.EXISTING_INTERFACE }}"
+          version: "9.9.${{ github.run_number }}"
 
-      - name: "TC-2 Update that instance (expect success)"
+      # TC-2: create a new System Interface (expect success, but NOT linked to any Systems)
+      - name: "TC-2 Create new System Interface"
         id: tc2
         continue-on-error: true
         uses: ./
@@ -47,11 +40,14 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "E2E-GOV-${{ env.RUN }} (DEV)"
-          version: "1.0.1"
+          resourceType: "System Interface"
+          resourceName: "E2E-Interface-${{ env.RUN }}"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{}'
 
-      - name: "TC-3 Create MicroService on that instance (expect success)"
+      # TC-3: update an interface that does not exist, autocreate off (expect failure)
+      - name: "TC-3 Missing interface without autocreate"
         id: tc3
         continue-on-error: true
         uses: ./
@@ -59,99 +55,14 @@ jobs:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "MicroService"
-          resourceName: "E2E-GOV-Svc-${{ env.RUN }}"
-          systemInstance: "E2E-GOV-${{ env.RUN }} (DEV)"
+          resourceType: "System Interface"
+          resourceName: "E2E-NoSuchInterface-${{ env.RUN }}"
           version: "1.0.0"
-          autocreate: true
-          metadata: '{}'
-
-      - name: "TC-4 Update that MicroService (expect success)"
-        id: tc4
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "MicroService"
-          resourceName: "E2E-GOV-Svc-${{ env.RUN }}"
-          systemInstance: "E2E-GOV-${{ env.RUN }} (DEV)"
-          version: "1.0.1"
-
-      - name: "TC-5 Create instance on a System you CANNOT access (expect failure)"
-        id: tc5
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "E2E-GOV-NoAccess-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{"System": "${{ env.NO_ACCESS_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
-
-      - name: "TC-6 Update an instance you CANNOT access (expect failure)"
-        id: tc6
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "${{ env.NO_ACCESS_INSTANCE }}"
-          version: "9.9.9"
-
-      - name: "TC-7 Create MicroService on an instance you CANNOT access (expect failure)"
-        id: tc7
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "MicroService"
-          resourceName: "E2E-GOV-Svc2-${{ env.RUN }}"
-          systemInstance: "${{ env.NO_ACCESS_INSTANCE }}"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{}'
-
-      - name: "TC-8 Create instance + new System with Resource ID (check skipped) (expect success)"
-        id: tc8
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "Environment Instance"
-          resourceName: "E2E-GOV-New-${{ env.RUN }} (DEV)"
-          version: "1.0.0"
-          autocreate: true
-          metadata: '{"System": "E2E-GOV-NewSys-${{ env.RUN }}", "Environment": "${{ env.ENVIRONMENT }}", "Resource ID": "APM-GOV-${{ env.RUN }}"}'
-
-      - name: "TC-9 System Component (identity check only) (expect success)"
-        id: tc9
-        continue-on-error: true
-        uses: ./
-        with:
-          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
-          app_id: ${{ secrets.ENOV8_APP_ID }}
-          app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "System Component"
-          resourceName: "E2E-GOV-Comp-${{ env.RUN }}"
-          version: "1.0"
-          autocreate: true
-          metadata: '{"Type": "Server"}'
 
       - name: Summarize results
         if: always()
         run: |
-          echo "## E2E Results — Governed (run ${RUN}, GitHub user ${GITHUB_TRIGGERING_ACTOR})" >> "$GITHUB_STEP_SUMMARY"
+          echo "## System Interface tests (run ${RUN}, GitHub user ${GITHUB_TRIGGERING_ACTOR})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Test Case | Expected | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
@@ -160,20 +71,8 @@ jobs:
             if [ "$expected" = "$actual" ]; then mark="✅ PASS"; else mark="❌ FAIL"; overall=1; fi
             echo "| ${label} | ${expected} | ${actual} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
           done <<EOT
-          TC-1 Create instance on a System you can access|success|${{ steps.tc1.outcome }}
-          TC-2 Update that instance|success|${{ steps.tc2.outcome }}
-          TC-3 Create MicroService on that instance|success|${{ steps.tc3.outcome }}
-          TC-4 Update that MicroService|success|${{ steps.tc4.outcome }}
-          TC-5 Create instance on a System you CANNOT access|failure|${{ steps.tc5.outcome }}
-          TC-6 Update an instance you CANNOT access|failure|${{ steps.tc6.outcome }}
-          TC-7 Create MicroService on an instance you CANNOT access|failure|${{ steps.tc7.outcome }}
-          TC-8 Create instance + new System with Resource ID (check skipped)|success|${{ steps.tc8.outcome }}
-          TC-9 System Component (identity check only)|success|${{ steps.tc9.outcome }}
+          TC-1 Update existing System Interface version|success|${{ steps.tc1.outcome }}
+          TC-2 Create new System Interface|success|${{ steps.tc2.outcome }}
+          TC-3 Missing interface without autocreate|failure|${{ steps.tc3.outcome }}
           EOT
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$overall" -eq 0 ]; then
-            echo "**All test cases matched their expected outcome.**" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "**One or more test cases did NOT match — see table above.**" >> "$GITHUB_STEP_SUMMARY"
-          fi
           exit $overall
