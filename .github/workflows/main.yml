@@ -1,78 +1,680 @@
-name: Test System Interface
+name: E2E Test Suite (All features)
 
-# Runs as the GitHub user who clicks "Run workflow" (must match an Enov8 User ID).
+# Tests the action code on the branch you pick in "Run workflow" (uses: ./).
+#
+# Runs as the GitHub user who clicks "Run workflow". Before running, that user must:
+#   1. exist in Enov8 with User ID = their GitHub username, User Status ActiveUser, Login Access Yes
+#   2. be in the Assigned To group of EXISTING_SYSTEM (below)
+#   3. be in the Group flagged "Env Management: true" — Systems this suite creates are Assigned To
+#      that group, and the follow-up updates (TC-1.1, 1.2, 2.x, 6.4, 7.1, 10.x) are access-checked
+#   4. NOT be in the Assigned To group of NO_ACCESS_SYSTEM
+# Fill in the Resource IDs under "Test data" with Systems that already exist.
+
 on:
   workflow_dispatch:
 
 jobs:
-  test-interface:
+  # TC-7.1: three legs run at once, each creating an instance on the same brand-new System.
+  # Whichever leg loses the race to create the System must reuse it, not fail.
+  parallel-creates:
     runs-on: ubuntu-latest
     environment: dev
 
+    strategy:
+      fail-fast: false
+      matrix:
+        leaf: [A, B, C]
+
     env:
       RUN: ${{ github.run_id }}
-      # An interface that already exists in Enov8 (find one with GET {{Ecosystem API URL}}SystemInterface)
-      EXISTING_INTERFACE: "MQ_SAP_GDW_SIT"
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # TC-1: update the version of an existing System Interface (expect success)
-      - name: "TC-1 Update existing System Interface version"
-        id: tc1
-        continue-on-error: true
+      - name: "TC-7.1 leg ${{ matrix.leaf }}: create an instance on a System shared by all legs (expect success)"
         uses: ./
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "System Interface"
-          resourceName: "${{ env.EXISTING_INTERFACE }}"
-          version: "9.9.${{ github.run_number }}"
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Par-${{ matrix.leaf }}-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Par-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
 
-      # TC-2: create a new System Interface (expect success, but NOT linked to any Systems)
-      - name: "TC-2 Create new System Interface"
-        id: tc2
+  e2e-tests:
+    needs: parallel-creates
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    environment: dev
+
+    env:
+      RUN: ${{ github.run_id }}
+      # ---------- Test data (governed + links) — fill in before running ----------
+      EXISTING_SYSTEM: "GDW"                  # you ARE in its Assigned To group
+      ENVIRONMENT: "DEV Env"
+      NO_ACCESS_SYSTEM: "NovaLink"            # you are NOT in its Assigned To group
+      NO_ACCESS_INSTANCE: "NovaLink (DEV)"    # an existing instance of NO_ACCESS_SYSTEM
+      UPSTREAM_RID: "<Resource ID of an existing System>"
+      DOWNSTREAM_RID_1: "<Resource ID of another existing System>"
+      DOWNSTREAM_RID_2: "<Resource ID of a third existing System>"
+      CONN_TYPE_1: "WebService"               # Connection Types configured in Enov8
+      CONN_TYPE_2: "BatchService"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # ---------- System Instance ----------
+
+      - name: "TC-1.3: Create System Instance with System cascade (expect success)"
+        id: tc1_3
         continue-on-error: true
         uses: ./
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "System Interface"
-          resourceName: "E2E-Interface-${{ env.RUN }}"
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
+
+      - name: "TC-1.1: Update the System Instance just created (expect success)"
+        id: tc1_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-6.4: Re-run the same version - no-op must still succeed (expect success)"
+        id: tc6_4
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-1.2: Create a second instance on the same (now-existing) System (expect success)"
+        id: tc1_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "DEV Env"
+            }
+
+      # ---------- MicroService ----------
+
+      - name: "TC-2.3: Create MicroService with full cascade (expect success)"
+        id: tc2_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Micro-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-MicroSys-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True"
+            }
+
+      - name: "TC-2.1: Update the MicroService just created (expect success)"
+        id: tc2_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Micro-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+
+      - name: "TC-2.2: Create a second MicroService on the same (now-existing) instance (expect success)"
+        id: tc2_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Micro2-${{ env.RUN }}"
+          systemInstance: "E2E-MicroSys-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: "{}"
+
+      # ---------- System Component ----------
+
+      - name: "TC-3.1: Create System Component with Type (expect success)"
+        id: tc3_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-Component-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": "True"
+            }
+
+      - name: "TC-3.2: System Component create fails without Type (expect FAILURE)"
+        id: tc3_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-Component2-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: "{}"
+
+      # ---------- Negative / validation ----------
+
+      - name: "TC-4.1: autocreate false never creates (expect FAILURE)"
+        id: tc4_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-NeverCreated-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: false
+          metadata: |
+            {
+              "System": "E2E-Sys-${{ env.RUN }}",
+              "Environment": "SIT Env"
+            }
+
+      - name: "TC-4.2: Invalid resourceType rejected (expect FAILURE)"
+        id: tc4_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Bogus Type"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+      - name: "TC-4.3: MicroService missing systemInstance rejected (expect FAILURE)"
+        id: tc4_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+      # ---------- JSON booleans for Core / Monitored ----------
+
+      - name: "TC-5.1: JSON boolean Core:true creates a System (expect success)"
+        id: tc5_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Bool-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-Bool-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Core": true
+            }
+
+      - name: "TC-5.2: JSON boolean Monitored:true on a System Component (expect success)"
+        id: tc5_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-BoolComp-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: |
+            {
+              "Type": "Server",
+              "Monitored": true
+            }
+
+      - name: "TC-5.3: Invalid boolean Core:maybe rejected before anything is created (expect FAILURE)"
+        id: tc5_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-BadBool-${{ env.RUN }} (SIT)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "E2E-BadBool-${{ env.RUN }}",
+              "Environment": "SIT Env",
+              "Core": "maybe"
+            }
+
+      # ---------- Connection options ----------
+
+      - name: "TC-8.1: insecure_skip_tls_verify does not break a normal run (expect success)"
+        id: tc8_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Sys-${{ env.RUN }} (SIT)"
+          version: "1.0.1"
+          insecure_skip_tls_verify: true
+
+      - name: "TC-8.2: Unsupported URL scheme (ftp://) rejected before any network call (expect FAILURE)"
+        id: tc8_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: "ftp://example.invalid/ecosystem"
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "Anything"
+          version: "1.0.0"
+
+
+      # ---------- Governed: access control ----------
+
+      - name: "TC-9.1 Governed: create instance on a System you can access (expect success)"
+        id: tc9_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Gov-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "${{ env.EXISTING_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
+
+      - name: "TC-9.2 Governed: update that instance (expect success)"
+        id: tc9_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Gov-${{ env.RUN }} (DEV)"
+          version: "1.0.1"
+
+      - name: "TC-9.3 Governed: create MicroService on that instance (expect success)"
+        id: tc9_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Gov-Svc-${{ env.RUN }}"
+          systemInstance: "E2E-Gov-${{ env.RUN }} (DEV)"
           version: "1.0.0"
           autocreate: true
           metadata: '{}'
 
-      # TC-3: update an interface that does not exist, autocreate off (expect failure)
-      - name: "TC-3 Missing interface without autocreate"
-        id: tc3
+      - name: "TC-9.4 Governed: create instance on a System you CANNOT access (expect FAILURE)"
+        id: tc9_4
         continue-on-error: true
         uses: ./
         with:
           enov8_url: ${{ secrets.ENOV8_BASE_URL }}
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
-          resourceType: "System Interface"
-          resourceName: "E2E-NoSuchInterface-${{ env.RUN }}"
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Gov-NoAccess-${{ env.RUN }} (DEV)"
           version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "${{ env.NO_ACCESS_SYSTEM }}", "Environment": "${{ env.ENVIRONMENT }}"}'
+
+      - name: "TC-9.5 Governed: update an instance you CANNOT access (expect FAILURE)"
+        id: tc9_5
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "${{ env.NO_ACCESS_INSTANCE }}"
+          version: "9.9.9"
+
+      - name: "TC-9.6 Governed: create MicroService on an instance you CANNOT access (expect FAILURE)"
+        id: tc9_6
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "MicroService"
+          resourceName: "E2E-Gov-Svc2-${{ env.RUN }}"
+          systemInstance: "${{ env.NO_ACCESS_INSTANCE }}"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{}'
+
+      # ---------- System <-> System links ----------
+
+      - name: "TC-10.1 Links: create instance + new System with 1 upstream and 2 downstream links (expect success)"
+        id: tc10_1
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "E2E-Lnk-Sys-${{ env.RUN }}", "Environment": "${{ env.ENVIRONMENT }}", "Resource ID": "APM-LNK-${{ env.RUN }}", "Upstream": [{"Resource ID": "${{ env.UPSTREAM_RID }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}], "Downstream": [{"Resource ID": "${{ env.DOWNSTREAM_RID_1 }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}, {"Resource ID": "${{ env.DOWNSTREAM_RID_2 }}", "ConnectionTechnology": "${{ env.CONN_TYPE_2 }}"}]}'
+
+      - name: "TC-10.2 Links: update with the same links (links skipped) (expect success)"
+        id: tc10_2
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-${{ env.RUN }} (DEV)"
+          version: "1.0.1"
+          metadata: '{"Upstream": [{"Resource ID": "${{ env.UPSTREAM_RID }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}]}'
+
+      - name: "TC-10.3 Links: missing ConnectionTechnology rejected (expect FAILURE)"
+        id: tc10_3
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-${{ env.RUN }} (DEV)"
+          version: "9.9.9"
+          metadata: '{"Downstream": [{"Resource ID": "${{ env.DOWNSTREAM_RID_1 }}"}]}'
+
+      - name: "TC-10.4 Links: unknown Resource ID rejected (expect FAILURE)"
+        id: tc10_4
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-${{ env.RUN }} (DEV)"
+          version: "9.9.9"
+          metadata: '{"Upstream": [{"Resource ID": "APM-NO-SUCH-${{ env.RUN }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}]}'
+
+      - name: "TC-10.5 Links: invalid Connection Type rejected by Enov8 (expect FAILURE)"
+        id: tc10_5
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-${{ env.RUN }} (DEV)"
+          version: "1.0.2"
+          metadata: '{"Upstream": [{"Resource ID": "${{ env.DOWNSTREAM_RID_2 }}", "ConnectionTechnology": "NOT-A-TYPE-${{ env.RUN }}"}]}'
+
+      - name: "TC-10.6 Links: not allowed on System Component (expect FAILURE)"
+        id: tc10_6
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "System Component"
+          resourceName: "E2E-Lnk-Comp-${{ env.RUN }}"
+          version: "1.0"
+          autocreate: true
+          metadata: '{"Type": "Server", "Upstream": [{"Resource ID": "${{ env.UPSTREAM_RID }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}]}'
+
+      - name: "TC-10.7 Links: a System cannot link to itself (expect FAILURE)"
+        id: tc10_7
+        continue-on-error: true
+        uses: ./
+        with:
+          enov8_url: ${{ secrets.ENOV8_BASE_URL }}
+          app_id: ${{ secrets.ENOV8_APP_ID }}
+          app_key: ${{ secrets.ENOV8_APP_KEY }}
+          resourceType: "Environment Instance"
+          resourceName: "E2E-Lnk-Self-${{ env.RUN }} (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: '{"System": "E2E-Lnk-Self-${{ env.RUN }}", "Environment": "${{ env.ENVIRONMENT }}", "Resource ID": "APM-SELF-${{ env.RUN }}", "Upstream": [{"Resource ID": "APM-SELF-${{ env.RUN }}", "ConnectionTechnology": "${{ env.CONN_TYPE_1 }}"}]}'
+
+      # ---------- Summary ----------
 
       - name: Summarize results
         if: always()
         run: |
-          echo "## System Interface tests (run ${RUN}, GitHub user ${GITHUB_TRIGGERING_ACTOR})" >> "$GITHUB_STEP_SUMMARY"
+          declare -A EXPECT=(
+            [tc1_3]=success [tc1_1]=success [tc1_2]=success
+            [tc2_3]=success [tc2_1]=success [tc2_2]=success
+            [tc3_1]=success [tc3_2]=failure
+            [tc4_1]=failure [tc4_2]=failure [tc4_3]=failure
+            [tc5_1]=success [tc5_2]=success [tc5_3]=failure
+            [tc6_4]=success
+            [tc8_1]=success [tc8_2]=failure
+            [tc9_1]=success
+            [tc9_2]=success
+            [tc9_3]=success
+            [tc9_4]=failure
+            [tc9_5]=failure
+            [tc9_6]=failure
+            [tc10_1]=success
+            [tc10_2]=success
+            [tc10_3]=failure
+            [tc10_4]=failure
+            [tc10_5]=failure
+            [tc10_6]=failure
+            [tc10_7]=failure
+          )
+          declare -A LABEL=(
+            [tc1_3]="TC-1.3 Create System Instance + System cascade"
+            [tc1_1]="TC-1.1 Update System Instance"
+            [tc1_2]="TC-1.2 Create instance, System already exists"
+            [tc2_3]="TC-2.3 Create MicroService, full cascade"
+            [tc2_1]="TC-2.1 Update MicroService"
+            [tc2_2]="TC-2.2 Create MicroService, instance already exists"
+            [tc3_1]="TC-3.1 Create System Component"
+            [tc3_2]="TC-3.2 System Component create fails without Type"
+            [tc4_1]="TC-4.1 autocreate false never creates"
+            [tc4_2]="TC-4.2 Invalid resourceType rejected"
+            [tc4_3]="TC-4.3 MicroService missing systemInstance rejected"
+            [tc5_1]="TC-5.1 JSON boolean Core:true accepted"
+            [tc5_2]="TC-5.2 JSON boolean Monitored:true accepted"
+            [tc5_3]="TC-5.3 Invalid boolean rejected"
+            [tc6_4]="TC-6.4 Same-version rerun succeeds (no-op)"
+            [tc8_1]="TC-8.1 insecure_skip_tls_verify on a valid cert"
+            [tc8_2]="TC-8.2 Unsupported URL scheme (ftp://) rejected"
+            [tc9_1]="TC-9.1 Governed: create instance on a System you can access"
+            [tc9_2]="TC-9.2 Governed: update that instance"
+            [tc9_3]="TC-9.3 Governed: create MicroService on that instance"
+            [tc9_4]="TC-9.4 Governed: create instance on a System you CANNOT access"
+            [tc9_5]="TC-9.5 Governed: update an instance you CANNOT access"
+            [tc9_6]="TC-9.6 Governed: create MicroService on an instance you CANNOT access"
+            [tc10_1]="TC-10.1 Links: create instance + new System with 1 upstream and 2 downstream links"
+            [tc10_2]="TC-10.2 Links: update with the same links (links skipped)"
+            [tc10_3]="TC-10.3 Links: missing ConnectionTechnology rejected"
+            [tc10_4]="TC-10.4 Links: unknown Resource ID rejected"
+            [tc10_5]="TC-10.5 Links: invalid Connection Type rejected by Enov8"
+            [tc10_6]="TC-10.6 Links: not allowed on System Component"
+            [tc10_7]="TC-10.7 Links: a System cannot link to itself"
+          )
+
+          overall=0
+
+          check() {
+            if [ "$3" = "$2" ]; then mark="✅ PASS"; else mark="❌ FAIL"; overall=1; fi
+            echo "| $1 | $2 | ${3:-(empty)} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          check_id() {
+            case "$2" in ECO-*) mark="✅ PASS" ;; *) mark="❌ FAIL"; overall=1 ;; esac
+            echo "| $1 | ECO-... | ${2:-(empty)} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          echo "## E2E Test Suite Results (run ${RUN})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Test Case | Expected | Actual | Result |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          overall=0
-          while IFS='|' read -r label expected actual; do
-            if [ "$expected" = "$actual" ]; then mark="✅ PASS"; else mark="❌ FAIL"; overall=1; fi
-            echo "| ${label} | ${expected} | ${actual} | ${mark} |" >> "$GITHUB_STEP_SUMMARY"
-          done <<EOT
-          TC-1 Update existing System Interface version|success|${{ steps.tc1.outcome }}
-          TC-2 Create new System Interface|success|${{ steps.tc2.outcome }}
-          TC-3 Missing interface without autocreate|failure|${{ steps.tc3.outcome }}
-          EOT
+
+          for id in tc1_3 tc1_1 tc1_2 tc2_3 tc2_1 tc2_2 tc3_1 tc3_2 tc4_1 tc4_2 tc4_3 tc5_1 tc5_2 tc5_3 tc6_4 tc8_1 tc8_2 tc9_1 tc9_2 tc9_3 tc9_4 tc9_5 tc9_6 tc10_1 tc10_2 tc10_3 tc10_4 tc10_5 tc10_6 tc10_7; do
+            outcome_var="STEP_OUTCOME_${id}"
+            check "${LABEL[$id]}" "${EXPECT[$id]}" "${!outcome_var}"
+          done
+
+          # Outputs (reuse the steps above, no extra API calls)
+          check    "TC-6.1 created=true after a create (TC-1.3)"            true  "$OUT_tc1_3_created"
+          check_id "TC-6.2 resource-id returned after a create (TC-1.3)"          "$OUT_tc1_3_id"
+          check    "TC-6.3 created=false after an update (TC-1.1)"          false "$OUT_tc1_1_created"
+          check    "TC-6.5 created=false on the no-op rerun (TC-6.4)"       false "$OUT_tc6_4_created"
+
+          same=differs
+          if [ -n "$OUT_tc1_3_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc1_1_id" ] && [ "$OUT_tc1_3_id" = "$OUT_tc6_4_id" ]; then same=same; fi
+          check    "TC-6.6 resource-id identical across create, update and no-op" same "$same"
+
+          # previous-version: what the resource held before each step ran
+          check    "TC-6.7 previous-version empty after a create (TC-1.3)"      "(none)" "${OUT_tc1_3_prev:-(none)}"
+          check    "TC-6.8 previous-version is the old version after an update (TC-1.1)" 1.0.0 "$OUT_tc1_1_prev"
+          check    "TC-6.9 previous-version equals current on a no-op rerun (TC-6.4)"    1.0.1 "$OUT_tc6_4_prev"
+
+          # Parallel job (TC-7.1)
+          check    "TC-7.1 Parallel legs sharing one new System all succeed" success "$PAR_RESULT"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$overall" -eq 0 ]; then
+            echo "**All test cases matched their expected outcome.**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**One or more test cases did NOT match their expected outcome - see table above.**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           exit $overall
+        env:
+          PAR_RESULT: ${{ needs.parallel-creates.result }}
+          OUT_tc1_3_created: ${{ steps.tc1_3.outputs.created }}
+          OUT_tc1_3_id: ${{ steps.tc1_3.outputs.resource-id }}
+          OUT_tc1_1_created: ${{ steps.tc1_1.outputs.created }}
+          OUT_tc1_1_id: ${{ steps.tc1_1.outputs.resource-id }}
+          OUT_tc6_4_created: ${{ steps.tc6_4.outputs.created }}
+          OUT_tc6_4_id: ${{ steps.tc6_4.outputs.resource-id }}
+          OUT_tc1_3_prev: ${{ steps.tc1_3.outputs.previous-version }}
+          OUT_tc1_1_prev: ${{ steps.tc1_1.outputs.previous-version }}
+          OUT_tc6_4_prev: ${{ steps.tc6_4.outputs.previous-version }}
+          STEP_OUTCOME_tc1_3: ${{ steps.tc1_3.outcome }}
+          STEP_OUTCOME_tc1_1: ${{ steps.tc1_1.outcome }}
+          STEP_OUTCOME_tc1_2: ${{ steps.tc1_2.outcome }}
+          STEP_OUTCOME_tc2_3: ${{ steps.tc2_3.outcome }}
+          STEP_OUTCOME_tc2_1: ${{ steps.tc2_1.outcome }}
+          STEP_OUTCOME_tc2_2: ${{ steps.tc2_2.outcome }}
+          STEP_OUTCOME_tc3_1: ${{ steps.tc3_1.outcome }}
+          STEP_OUTCOME_tc3_2: ${{ steps.tc3_2.outcome }}
+          STEP_OUTCOME_tc4_1: ${{ steps.tc4_1.outcome }}
+          STEP_OUTCOME_tc4_2: ${{ steps.tc4_2.outcome }}
+          STEP_OUTCOME_tc4_3: ${{ steps.tc4_3.outcome }}
+          STEP_OUTCOME_tc5_1: ${{ steps.tc5_1.outcome }}
+          STEP_OUTCOME_tc5_2: ${{ steps.tc5_2.outcome }}
+          STEP_OUTCOME_tc5_3: ${{ steps.tc5_3.outcome }}
+          STEP_OUTCOME_tc6_4: ${{ steps.tc6_4.outcome }}
+          STEP_OUTCOME_tc8_1: ${{ steps.tc8_1.outcome }}
+          STEP_OUTCOME_tc8_2: ${{ steps.tc8_2.outcome }}
+          STEP_OUTCOME_tc9_1: ${{ steps.tc9_1.outcome }}
+          STEP_OUTCOME_tc9_2: ${{ steps.tc9_2.outcome }}
+          STEP_OUTCOME_tc9_3: ${{ steps.tc9_3.outcome }}
+          STEP_OUTCOME_tc9_4: ${{ steps.tc9_4.outcome }}
+          STEP_OUTCOME_tc9_5: ${{ steps.tc9_5.outcome }}
+          STEP_OUTCOME_tc9_6: ${{ steps.tc9_6.outcome }}
+          STEP_OUTCOME_tc10_1: ${{ steps.tc10_1.outcome }}
+          STEP_OUTCOME_tc10_2: ${{ steps.tc10_2.outcome }}
+          STEP_OUTCOME_tc10_3: ${{ steps.tc10_3.outcome }}
+          STEP_OUTCOME_tc10_4: ${{ steps.tc10_4.outcome }}
+          STEP_OUTCOME_tc10_5: ${{ steps.tc10_5.outcome }}
+          STEP_OUTCOME_tc10_6: ${{ steps.tc10_6.outcome }}
+          STEP_OUTCOME_tc10_7: ${{ steps.tc10_7.outcome }}
