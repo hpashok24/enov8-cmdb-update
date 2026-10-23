@@ -381,6 +381,131 @@ async function resolveOrCreateSystemInstance(baseUrl, headers, instanceName, met
   return instanceName;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// System ↔ System links (Upstream / Downstream)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ✅ Validates every Upstream / Downstream entry and resolves each Resource ID to a System ID.
+// Runs BEFORE any write, so a bad entry never leaves a half-finished set of links.
+// Upstream   X → SOURCE = main System, TARGET = X
+// Downstream X → SOURCE = X,           TARGET = main System
+async function planSystemLinks(baseUrl, headers, metadata, mainSystemId) {
+  const plan = [];
+
+  for (const direction of ['Upstream', 'Downstream']) {
+    const entries = metadata[direction];
+
+    if (entries === undefined || entries === null) continue;
+
+    if (!Array.isArray(entries)) {
+      throw new Error(`❌ metadata.${direction} must be a list, e.g. [{"Resource ID": "APM-1001", "ConnectionTechnology": "ESB"}]`);
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i] || {};
+      const label = `${direction}[${i}]`;
+      const resourceId = String(entry['Resource ID'] ?? '').trim();
+      const connectionType = String(entry['ConnectionTechnology'] ?? '').trim();
+
+      if (!resourceId) {
+        throw new Error(`❌ ${label}: "Resource ID" is required — request rejected`);
+      }
+
+      if (!connectionType) {
+        throw new Error(`❌ ${label} (${resourceId}): "ConnectionTechnology" is required — request rejected`);
+      }
+
+      const linked = await findRecord(baseUrl, headers, 'System', 'Resource ID', resourceId);
+
+      if (!linked || !linked['System ID']) {
+        throw new Error(`❌ ${label}: no System found with Resource ID "${resourceId}" — request rejected`);
+      }
+
+      // A System cannot be linked to itself — checked here so nothing has been written yet
+      const isSelf = (mainSystemId && linked['System ID'] === mainSystemId)
+        || (metadata['Resource ID'] && sameText(resourceId, metadata['Resource ID']));
+
+      if (isSelf) {
+        throw new Error(`❌ ${label} (${resourceId}): a System cannot be linked to itself — request rejected`);
+      }
+
+      console.log(`🔎 ${label}: Resource ID "${resourceId}" → System "${linked['Resource Name']}" (${linked['System ID']})`);
+
+      plan.push({
+        direction,
+        label,
+        resourceId,
+        connectionType,
+        linkedId: linked['System ID'],
+        linkedName: linked['Resource Name']
+      });
+    }
+  }
+
+  return plan;
+}
+
+// ✅ Creates the planned links against the main System; skips links that already exist
+async function applySystemLinks(baseUrl, headers, plan, mainSystemId, mainSystemName) {
+  if (plan.length === 0) return;
+
+  const relUrl = `${baseUrl}/api/System_REL_System`;
+  const done = new Set();
+
+  for (const link of plan) {
+    if (link.linkedId === mainSystemId) {
+      throw new Error(`❌ ${link.label} (${link.resourceId}): a System cannot be linked to itself ("${mainSystemName}")`);
+    }
+
+    const sourceId = link.direction === 'Upstream' ? mainSystemId : link.linkedId;
+    const targetId = link.direction === 'Upstream' ? link.linkedId : mainSystemId;
+    const sourceName = link.direction === 'Upstream' ? mainSystemName : link.linkedName;
+    const targetName = link.direction === 'Upstream' ? link.linkedName : mainSystemName;
+    const key = `${sourceId}>${targetId}`;
+
+    if (done.has(key)) {
+      console.log(`ℹ️ ${link.label}: duplicate of an earlier entry — skipped`);
+      continue;
+    }
+
+    done.add(key);
+
+    // Already linked? (filter by SOURCE_ID, then match TARGET_ID exactly)
+    const existingRes = await request('GET', `${relUrl}?SOURCE_ID=${encodeURIComponent(sourceId)}`, undefined, headers);
+    const exists = toRecords(existingRes.parsed).some(r => sameText(r['SOURCE_ID'], sourceId) && sameText(r['TARGET_ID'], targetId));
+
+    if (exists) {
+      console.log(`ℹ️ ${link.label}: "${sourceName}" → "${targetName}" already linked — skipped`);
+      continue;
+    }
+
+    const payload = JSON.stringify({
+      'SOURCE_ID': sourceId,
+      'TARGET_ID': targetId,
+      'Connection Type': link.connectionType
+    });
+
+    console.log(`📡 POST ${relUrl}`);
+    console.log(`📦 Payload:\n${payload}`);
+
+    const res = await request('POST', relUrl, payload, {
+      ...headers,
+      'Content-Length': Buffer.byteLength(payload)
+    });
+
+    console.log(`📨 Response:\n${res.body}`);
+
+    const results = res.parsed && Array.isArray(res.parsed.result) ? res.parsed.result : null;
+    const ok = res.parsed && res.parsed.success === true && (!results || results.some(r => r.success === true));
+
+    if (!ok) {
+      throw new Error(`❌ Failed to link "${sourceName}" → "${targetName}" (${link.label}, Connection Type "${link.connectionType}"): ${res.body}`);
+    }
+
+    console.log(`✅ Linked "${sourceName}" → "${targetName}" (${link.connectionType})`);
+  }
+}
+
 function writeOutput(res) {
   if (!process.env.GITHUB_OUTPUT) return;
 
@@ -448,10 +573,14 @@ async function run() {
     const userId = await resolveEnov8User(baseUrl, headers, githubUser);
 
     // ✅ 2. System access check (System Instance and MicroService, create and update) — before any write
+    let associatedSystem = null;
+
     if (resourceType === 'Environment Instance' || resourceType === 'MicroService') {
       const { system, reason } = await resolveAssociatedSystem(baseUrl, headers, {
         resourceType, resourceName, systemInstance, metadata
       });
+
+      associatedSystem = system;
 
       if (system) {
         await validateSystemAccess(baseUrl, headers, userId, system);
@@ -459,6 +588,38 @@ async function run() {
         console.log(`ℹ️ System access check not applicable — ${reason}`);
       }
     }
+
+    // ✅ 2b. System ↔ System links — validated and resolved before any write
+    const wantsLinks = metadata['Upstream'] !== undefined || metadata['Downstream'] !== undefined;
+    let linkPlan = [];
+
+    if (wantsLinks) {
+      if (resourceType !== 'Environment Instance' && resourceType !== 'MicroService') {
+        throw new Error(`❌ Upstream / Downstream links are only supported for Environment Instance and MicroService (got "${resourceType}")`);
+      }
+
+      if (!associatedSystem && !metadata['System'] && !metadata['Resource ID']) {
+        throw new Error('❌ Upstream / Downstream links need a System: set metadata.System or metadata.Resource ID');
+      }
+
+      linkPlan = await planSystemLinks(baseUrl, headers, metadata, associatedSystem && associatedSystem['System ID']);
+    }
+
+    // Links are attached to the associated System; a System created by this run is looked up after the create
+    const linkSystems = async () => {
+      if (linkPlan.length === 0) return;
+
+      const main = associatedSystem || await findSystem(baseUrl, headers, {
+        systemRef: metadata['System'],
+        resourceId: metadata['Resource ID']
+      });
+
+      if (!main || !main['System ID']) {
+        throw new Error('❌ Could not find the System to attach Upstream / Downstream links to');
+      }
+
+      await applySystemLinks(baseUrl, headers, linkPlan, main['System ID'], main['Resource Name']);
+    };
 
     // ✅ 3. Update (unchanged behaviour)
     const url = `${baseUrl}/api/${apiPath}`;
@@ -487,12 +648,14 @@ async function run() {
 
     if (updateRes.parsed && updateRes.parsed.total_updated > 0) {
       console.log('✅ Enov8 CMDB updated successfully');
+      await linkSystems();
       writeOutput(updateRes);
       return;
     }
 
     if (updateRes.parsed && updateRes.parsed.success === true) {
       console.log('⚠️ No update applied (already up-to-date or invalid field)');
+      await linkSystems();
       writeOutput(updateRes);
       return;
     }
@@ -561,6 +724,7 @@ async function run() {
     const { res: createRes } = await postAndCheck(url, createPayloadObj, headers, `"${resourceName}"`);
 
     console.log('✅ Enov8 CMDB resource created successfully');
+    await linkSystems();
     writeOutput(createRes);
 
   } catch (err) {
