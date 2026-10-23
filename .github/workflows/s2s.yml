@@ -7,39 +7,13 @@
 #
 # Notes from reading the action source (v1.2.0):
 #   - There is no floating "v1" tag (only v1.0.0 / v1.1.0 / v1.2.0), so "@v1" fails to resolve.
-#     This workflow pins @v1.2.0.
-#   - On autocreate, metadata keys used are: Status, System, Environment, Business Unit,
-#     Type, Core, Resource ID. "Upstream"/"Downstream" are NOT read by v1.2.0; they are
-#     kept in the payload below but will be silently ignored.
+#   - "Upstream"/"Downstream" in metadata are not read by v1.2.0 and are silently ignored.
 #   - "Environment" must already exist in Enov8. "System" is created if missing.
-#   - The action has no declared outputs, but writes an undeclared "result" output
-#     (the raw API response), which is printed below.
 
 name: Enov8 - Deployment Version Update (test)
 
 on:
   workflow_dispatch:
-    inputs:
-      resourceName:
-        description: "Environment Instance name (must match Enov8 exactly)"
-        required: true
-        default: "NewSystem (DEV)"
-      version:
-        description: "Version to set"
-        required: true
-        default: "1.0.0"
-      system:
-        description: "System name (created if missing on autocreate)"
-        required: true
-        default: "NewSystem"
-      environment:
-        description: "Environment name (must already exist in Enov8)"
-        required: true
-        default: "DEV Env"
-      autocreate:
-        description: "Create the instance if it does not exist"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -48,52 +22,6 @@ jobs:
   update-version:
     runs-on: ubuntu-latest
     steps:
-      - name: Check secrets are set
-        env:
-          ENOV8_BASE_URL: ${{ secrets.ENOV8_BASE_URL }}
-          ENOV8_APP_ID: ${{ secrets.ENOV8_APP_ID }}
-          ENOV8_APP_KEY: ${{ secrets.ENOV8_APP_KEY }}
-        run: |
-          missing=0
-          for s in ENOV8_BASE_URL ENOV8_APP_ID ENOV8_APP_KEY; do
-            if [ -z "${!s}" ]; then echo "::error::Secret $s is not set"; missing=1; fi
-          done
-          exit $missing
-
-      - name: Build and validate metadata JSON
-        id: meta
-        env:
-          SYSTEM: ${{ inputs.system }}
-          ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          # Built with jq so input values are escaped safely
-          jq -n --arg system "$SYSTEM" --arg env "$ENVIRONMENT" '{
-            "System": $system,
-            "Environment": $env,
-            "Business Unit": "IT",
-            "Type": "Cloud",
-            "Core": "True",
-            "Resource ID": "APM-12345",
-            "Upstream": [
-              { "Resource ID": "APM-1001", "ConnectionTechnology": "ESB" }
-            ],
-            "Downstream": [
-              { "Resource ID": "APM-2002", "ConnectionTechnology": "ESB" },
-              { "Resource ID": "APM-3003", "ConnectionTechnology": "FTP" }
-            ]
-          }' > metadata.json
-
-          jq -e 'type == "object" and has("System") and has("Environment")' metadata.json > /dev/null \
-            || { echo "::error::metadata.json is invalid"; exit 1; }
-
-          echo "Metadata to send:"
-          jq . metadata.json
-          {
-            echo "json<<EOF"
-            jq -c . metadata.json
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Enov8 - Governed Deployment Version Update
         id: enov8
         uses: enov8-Ltd/enov8-update-deployment-version@v1.2.0
@@ -102,49 +30,30 @@ jobs:
           app_id: ${{ secrets.ENOV8_APP_ID }}
           app_key: ${{ secrets.ENOV8_APP_KEY }}
           resourceType: "Environment Instance"
-          resourceName: ${{ inputs.resourceName }}
-          version: ${{ inputs.version }}
-          autocreate: ${{ inputs.autocreate }}
-          metadata: ${{ steps.meta.outputs.json }}
+          resourceName: "NewSystem (DEV)"
+          version: "1.0.0"
+          autocreate: true
+          metadata: |
+            {
+              "System": "NewSystem",
+              "Environment": "DEV Env",
+              "Business Unit": "IT",
+              "Type": "Cloud",
+              "Core": "True",
+              "Resource ID": "APM-12345",
+              "Upstream": [
+                { "Resource ID": "APM-1001", "ConnectionTechnology": "ESB" }
+              ],
+              "Downstream": [
+                { "Resource ID": "APM-2002", "ConnectionTechnology": "ESB" },
+                { "Resource ID": "APM-3003", "ConnectionTechnology": "FTP" }
+              ]
+            }
 
       - name: Print action result
         if: always()
-        env:
-          RESULT: ${{ steps.enov8.outputs.result }}
         run: |
           echo "Step outcome: ${{ steps.enov8.outcome }}"
-          if [ -n "$RESULT" ]; then
-            echo "$RESULT" | jq . 2>/dev/null || echo "$RESULT"
-          else
-            echo "(no 'result' output - see the action's log above)"
-          fi
-
-      - name: Verify in Enov8 (read back the instance)
-        if: success()
-        env:
-          ENOV8_BASE_URL: ${{ secrets.ENOV8_BASE_URL }}
-          ENOV8_APP_ID: ${{ secrets.ENOV8_APP_ID }}
-          ENOV8_APP_KEY: ${{ secrets.ENOV8_APP_KEY }}
-          RESOURCE_NAME: ${{ inputs.resourceName }}
-          EXPECTED_VERSION: ${{ inputs.version }}
-        run: |
-          base="${ENOV8_BASE_URL%/}"
-          name_q=$(jq -rn --arg v "$RESOURCE_NAME" '$v|@uri')
-          resp=$(curl -sS -G "$base/api/SystemInstance?Resource%20Name=$name_q" \
-            -H "user-id: $ENOV8_APP_ID" -H "app-id: $ENOV8_APP_ID" -H "app-key: $ENOV8_APP_KEY")
-
-          record=$(echo "$resp" | jq --arg n "$RESOURCE_NAME" \
-            '(if type == "array" then . else [.] end) | map(select(."Resource Name" == $n)) | first')
-          echo "$record" | jq .
-
-          actual=$(echo "$record" | jq -r '.Version // empty')
-          echo "Expected version: $EXPECTED_VERSION"
-          echo "Actual version:   ${actual:-<not found>}"
-          {
-            echo "### Enov8 version update"
-            echo "| Instance | Expected | Actual |"
-            echo "|---|---|---|"
-            echo "| $RESOURCE_NAME | $EXPECTED_VERSION | ${actual:-not found} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          [ "$actual" = "$EXPECTED_VERSION" ] || { echo "::error::Version mismatch"; exit 1; }
+          cat <<'EOF'
+          ${{ steps.enov8.outputs.result }}
+          EOF
