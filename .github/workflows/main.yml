@@ -61,9 +61,9 @@ jobs:
       ENVIRONMENT: "DEV Env"
       NO_ACCESS_SYSTEM: "NovaLink"            # you are NOT in its Assigned To group
       NO_ACCESS_INSTANCE: "NovaLink (DEV)"    # an existing instance of NO_ACCESS_SYSTEM
-      UPSTREAM_RID: "<Resource ID of an existing System>"
-      DOWNSTREAM_RID_1: "<Resource ID of another existing System>"
-      DOWNSTREAM_RID_2: "<Resource ID of a third existing System>"
+      UPSTREAM_RID: "S0007"
+      DOWNSTREAM_RID_1: "3456"
+      DOWNSTREAM_RID_2: "1234"
       CONN_TYPE_1: "WebService"               # Connection Types configured in Enov8
       CONN_TYPE_2: "BatchService"
 
