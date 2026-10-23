@@ -401,7 +401,8 @@ async function applySystemLinks(baseUrl, headers, plan, mainSystemId, mainSystem
       continue;
     }
 
-    const payload = JSON.stringify({ 'SOURCE_ID': sourceId, 'TARGET_ID': targetId, 'Connection Type': link.connectionType });
+    // Relationship endpoints take a LIST of links — a bare object is read as one row per field
+    const payload = JSON.stringify([{ 'SOURCE_ID': sourceId, 'TARGET_ID': targetId, 'Connection Type': link.connectionType }]);
 
     console.log(`📡 POST ${relUrl}`);
     console.log(`📦 Payload:\n${payload}`);
